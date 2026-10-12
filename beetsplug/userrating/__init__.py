@@ -39,6 +39,10 @@ attribute as a ``user -> rating`` mapping (ratings are integers from 0 to
 :mod:`beetsplug.userrating.storage`).
 """
 
+import inspect
+import logging
+from functools import wraps
+
 from beets import config, ui
 from beets.plugins import BeetsPlugin
 from beets.util import displayable_path, syspath
@@ -110,6 +114,31 @@ class UserRatingsPlugin(BeetsPlugin):
         self.template_fields[u'userratings'] = self._all_ratings_field
         for user in self.settings.beets_users:
             self.register_user(user)
+
+    def _set_log_level_and_params(self, base_log_level, func):
+        """Keep beets' callback filtering and verbosity, allowing nesting.
+
+        Import stages can trigger this plugin's database_change listener.
+        Beets' wrapper asserts NOTSET on entry; restore the actual previous
+        level instead so both callbacks retain their logging context.
+        """
+        argspec = inspect.getfullargspec(func)
+
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            previous_level = self._log.level
+            verbosity = config['verbose'].get(int)
+            log_level = max(logging.DEBUG, base_log_level - 10 * verbosity)
+            self._log.setLevel(log_level)
+            try:
+                if argspec.varkw is None:
+                    kwargs = {key: value for key, value in kwargs.items()
+                              if key in argspec.args}
+                return func(*args, **kwargs)
+            finally:
+                self._log.setLevel(previous_level)
+
+        return wrapper
 
     # Templates -------------------------------------------------------
 
