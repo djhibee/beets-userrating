@@ -179,7 +179,10 @@ def test_autorate_global_review(env, answers):
     assert out.index('autorate: 2 rating proposals to review') \
         < out.index('Rating of djhibee')
     assert _rating(env, first) == 3
-    # the second item's proposal was computed before the first was rated
+    # proposals are refreshed before review: the second item's similar
+    # items now include the first one (3 and 5: tie broken by highest)
+    assert 'Rating of djhibee (0-10, Enter for 5)' in out
+    assert '    3 (1 item):' in out
     assert _rating(env, second) == 5
 
 

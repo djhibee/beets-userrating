@@ -144,10 +144,15 @@ class FuzzyStrategy(ArtistTitleStrategy):
             u'fuzzy', u'similar artist and title (fuzzy)', requires=u'fuzzy')
 
     def query(self, item):
+        # Called once per search: read the threshold here rather than for
+        # each candidate.
+        self._threshold = config['fuzzy']['threshold'].as_number()
         return None
 
     def match(self, item, candidate):
-        threshold = config['fuzzy']['threshold'].as_number()
+        threshold = getattr(self, '_threshold', None)
+        if threshold is None:
+            threshold = config['fuzzy']['threshold'].as_number()
         for field in self.fields:
             a = self.normalize(item.get(field))
             b = self.normalize(candidate.get(field))

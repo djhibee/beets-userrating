@@ -68,6 +68,8 @@ class Proposal(object):
         groups = {}
         for similar_item in self.similar:
             rating = as_ratings(similar_item.get('userrating')).get(user)
+            if rating is None:
+                continue
             groups.setdefault(rating, []).append(similar_item)
         #: ``(rating, items)`` pairs, most frequent rating first.
         self.groups = sorted(groups.items(),
@@ -175,8 +177,11 @@ class AutoRater(object):
             if as_ratings(current.get('userrating')).get(self.user) \
                     is not None:
                 continue
-            proposal.item = current
-            self.review(proposal)
+            # Similar items may have been rated (or fixed) since: refresh
+            # the proposal.
+            proposal = self.find(current, proposal.write)
+            if proposal is not None:
+                self.review(proposal)
 
     # Reviewing -------------------------------------------------------
 

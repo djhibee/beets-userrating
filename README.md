@@ -309,9 +309,9 @@ proposed ratings are applied without asking. At import in quiet mode
 With **global review** (`global_review: yes` or `-g`), all the proposals
 are first computed, then reviewed one after the other at the end of the
 command or of the import (the import is not interrupted by questions).
-Note that proposals are computed before any of them is applied. Without
-it, each proposal is reviewed as soon as it is found, so a track rated
-during the review can be used for the next proposals. At import, global
+Each proposal is refreshed just before being reviewed, so ratings chosen
+(or fixed) earlier in the review are taken into account. Without global
+review, each proposal is reviewed as soon as it is found. At import, global
 review is recommended, as questions would otherwise be mixed with the
 importer's ones.
 
