@@ -213,7 +213,11 @@ class RatingCommand(object):
     def _apply(self, lib, item, current, new):
         if new == current:
             return
-        item['userrating'] = new
+        if new:
+            item['userrating'] = new
+        elif 'userrating' in item._values_flex:
+            # Unrated: no stored value at all.
+            del item['userrating']
         changes = [u'  userrating[{0}]: {1} -> {2}'.format(
             user, _display(current.get(user)), _display(new.get(user)))
             for user in sorted(set(current) | set(new))

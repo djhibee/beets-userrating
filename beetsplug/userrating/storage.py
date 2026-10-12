@@ -19,9 +19,11 @@ Storage formats
 ---------------
 
 * ID3v2 (MP3, AIFF, WAV...): one Popularimeter (``POPM``) frame per beets
-  user, whose "email" is ``beets-<user>``. Values are 1-255 (0 means
-  "unrated" in POPM, so a 0 rating is stored as 1). POPM frames of other
-  players are left untouched unless they are synchronized.
+  user, whose "email" is ``beets-<user>``. Values are 0-255 (a 0 rating
+  is stored as POPM 0). POPM frames of other players are left untouched
+  unless they are synchronized.
+* In all formats, an unrated user has no tag at all: there is no stored
+  value for "unrated", which keeps it distinct from a 0 rating.
 * Vorbis comments (FLAC, Ogg Vorbis, Opus, Speex), APEv2 (Musepack,
   WavPack, Monkey's Audio) and ASF (WMA): one ``RATING:beets-<user>`` tag
   per user holding the rating as a plain 0-10 integer. This mimics the
@@ -139,8 +141,6 @@ def _id3_read(tags, known_users):
     beets, players = {}, {}
     for frame in tags.getall('POPM'):
         email, raw = frame.email, frame.rating
-        if not raw:
-            continue  # 0 means unrated
         if email.startswith(BEETS_PREFIX):
             try:
                 user = validate_user(email[len(BEETS_PREFIX):])
@@ -149,8 +149,10 @@ def _id3_read(tags, known_users):
             beets[_resolve_user(user, known_users)] = _BEETS_SCALER.scale(raw)
             continue
         for player in PLAYERS.values():
-            if player.popm is not None and player.popm.name == email:
-                players[player.name] = player.popm.scale(raw)
+            scaler = player.popm
+            if scaler is not None and scaler.name == email:
+                if raw or not scaler.ZERO_IS_UNRATED:
+                    players[player.name] = scaler.scale(raw)
     return beets, players
 
 
@@ -206,7 +208,9 @@ def _text_read(tags, known_users, player_attr):
             if key.lower() == scaler.key.lower():
                 raw = _raw_text(tags[key])
                 try:
-                    if raw is not None and float(raw) > 0:
+                    value = float(raw)
+                    if value > 0 or (value == 0
+                                     and not scaler.ZERO_IS_UNRATED):
                         players[player.name] = scaler.scale(raw)
                 except (TypeError, ValueError):
                     pass

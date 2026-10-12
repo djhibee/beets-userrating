@@ -5,8 +5,8 @@ from beetsplug.userrating.scalers import (
 
 def test_beets_scaler_roundtrip_keeps_zero_distinct_from_unrated():
     scaler = Mp3BeetsScaler()
-    # POPM 0 means unrated: a 0 rating is stored as 1
-    assert scaler.unscale(0) == 1
+    # a 0 rating is stored as POPM 0 (unrated users have no frame)
+    assert scaler.unscale(0) == 0
     for rating in range(0, 11):
         assert scaler.scale(scaler.unscale(rating)) == rating
     assert scaler.unscale(10) == 255

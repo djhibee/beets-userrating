@@ -25,7 +25,7 @@ def test_mp3_write_keeps_other_popm_frames(copy_rsrc):
     storage.write_file(path, {'djhibee': 0, 'toto': 10}, 'djhibee')
     frames = _popm(path)
     assert frames == {'Windows Media Player 9 Series': 196,
-                      'beets-djhibee': 1, 'beets-toto': 255}
+                      'beets-djhibee': 0, 'beets-toto': 255}
     found = storage.read_file(path, ['djhibee', 'toto'])
     assert found.beets == {'djhibee': 0, 'toto': 10}
 
@@ -122,6 +122,35 @@ def test_mp4_file_not_supported(tmp_path, copy_rsrc):
     with pytest.raises(storage.UnsupportedFormatError):
         storage.read_file(path)
     assert not any(key.startswith('----:') for key in MP4(path).tags)
+
+
+def test_zero_rating_vs_unrated(copy_rsrc):
+    for name in ('full.mp3', 'full.flac', 'full.m4a'):
+        path = copy_rsrc(name)
+        storage.write_file(path, {'toto': 0}, 'toto')
+        assert storage.read_file(path, ['toto']).beets == {'toto': 0}, name
+        # unrated: no tag at all
+        storage.write_file(path, {}, 'toto')
+        assert storage.read_file(path, ['toto']).beets == {}, name
+        tags = mutagen.File(path).tags
+        assert not any('beets-' in str(key) for key in tags.keys()), name
+
+
+def test_external_zero_rating(copy_rsrc):
+    path = copy_rsrc('full.mp3')
+    tags = mutagen.File(path)
+    tags.tags.add(POPM(email='Banshee', rating=0))
+    tags.save()
+    # POPM 0 means unrated for external players
+    assert storage.read_file(path).players == {}
+
+    from mutagen.flac import FLAC
+    path = copy_rsrc('full.flac')
+    flac = FLAC(path)
+    flac['rating:quodlibet@lists.sacredchao.net'] = ['0.0']
+    flac.save()
+    # Quod Libet: 0.0 is a 0 rating (unrated tracks have no tag)
+    assert storage.read_file(path).players == {'Quodlibet': 0}
 
 
 def test_update_comment():

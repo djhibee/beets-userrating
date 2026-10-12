@@ -312,3 +312,16 @@ def test_m4a_supported_mp4_skipped(env):
     env.run('userrating', '--import', '-f', 'title:video')
     assert _mp4_ratings(mp4_path) == {}
     assert env.reload(mp4)['userrating'] == {'toto': 5}
+
+
+def test_unrated_has_no_stored_value(env):
+    item = env.add_item(title='one')
+    env.run('userrating', '-m', '-u', 'toto', '-r', '0')
+    assert env.reload(item)['userrating'] == {'toto': 0}
+    assert _popm(env.reload(item)) == {'beets-toto': 0}
+    env.run('userrating', '--remove', '-u', 'toto')
+    assert 'userrating' not in env.reload(item)._values_flex
+    with env.lib.transaction() as tx:
+        assert tx.query('SELECT * FROM item_attributes '
+                        "WHERE key = 'userrating'") == []
+    assert _popm(env.reload(item)) == {}

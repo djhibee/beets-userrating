@@ -6,7 +6,9 @@ The *userrating* plugin manages **per-user track ratings** in your
 * ratings are integers from `0` to `10`, stored per user
   (e.g. `userrating["djhibee"] = 8`);
 * a user who did not rate a track has a *null* rating, which is different
-  from a `0` rating explicitly set by the user;
+  from a `0` rating explicitly set by the user: a `0` rating is stored
+  like any other rating, while nothing at all is stored for an unrated
+  track (no library attribute, no file tag);
 * ratings can be queried, displayed and modified with human-friendly
   syntaxes;
 * ratings are imported from / written to the files (ID3 `POPM` frames,
@@ -157,9 +159,14 @@ the reference: ratings of beets users not in the library are removed from
 the file. Tags of other players are kept as-is unless synchronized (see
 `sync_external_ratings`).
 
+Whatever the format, an unrated user has no tag at all in the file. For
+external players, their own conventions are kept: POPM `0` and WMP's
+`WM/SharedUserRating` `0` mean "unrated" for those players and are
+ignored when reading, while Quod Libet's Vorbis `0.0` is a `0` rating.
+
 | Format | Beets users | External players |
 | ------ | ----------- | ---------------- |
-| ID3v2 (MP3, AIFF, WAV) | one `POPM` frame per user, email `beets-<user>`, value 1-255 (POPM `0` means unrated, so a `0` rating is stored as `1`). The play counter is preserved. | `POPM` frames: `Banshee`, `rating@winamp.com` (Winamp), `Windows Media Player 9 Series` (WMP), `no@email` (MediaMonkey), `quodlibet@lists.sacredchao.net` (Quodlibet) |
+| ID3v2 (MP3, AIFF, WAV) | one `POPM` frame per user, email `beets-<user>`, value 0-255 (a `0` rating is stored as POPM `0`; unrated users have no frame). The play counter is preserved. | `POPM` frames: `Banshee`, `rating@winamp.com` (Winamp), `Windows Media Player 9 Series` (WMP), `no@email` (MediaMonkey), `quodlibet@lists.sacredchao.net` (Quodlibet) |
 | Vorbis comments (FLAC, Ogg, Opus) | `RATING:beets-<user>=<0-10>` | `RATING:quodlibet@lists.sacredchao.net` (Quodlibet, 0.0-1.0) |
 | M4A (AAC, ALAC) | freeform atom `----:com.apple.iTunes:RATING:beets-<user>` = `<0-10>` | - |
 | ASF (WMA) | attribute `RATING:beets-<user>` = `<0-10>` | `WM/SharedUserRating` (WMP) |

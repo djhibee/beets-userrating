@@ -35,6 +35,9 @@ class Scaler(object):
     email).
     """
     MAX_ACCEPTED_VALUE = MAX_RATING
+    #: Whether a raw ``0`` means "unrated" for this player (as in the ID3
+    #: POPM specification) rather than a 0 rating.
+    ZERO_IS_UNRATED = True
 
     def __init__(self, name, max_value=255):
         self.name = name
@@ -79,11 +82,12 @@ class Mp3BeetsScaler(Scaler):
     """Scaler for the POPM frames written by beets for its users
     (email ``beets-<user>``).
 
-    POPM value 0 means "unrated" so a 0 rating explicitly set by a user is
-    stored as 1 (which is scaled back to 0) to keep it distinct from a null
-    rating.
+    A 0 rating explicitly set by a user is stored as POPM 0 (and read back
+    as 0). An unrated user has no POPM frame at all, so 0 and unrated stay
+    distinct.
     """
     EMAIL_PREFIX = u'beets-'
+    ZERO_IS_UNRATED = False
 
     def __init__(self, user=None):
         super(Mp3BeetsScaler, self).__init__(self.email(user or u''))
@@ -91,9 +95,6 @@ class Mp3BeetsScaler(Scaler):
     @classmethod
     def email(cls, user):
         return cls.EMAIL_PREFIX + user
-
-    def unscale(self, userrating_value):
-        return max(1, super(Mp3BeetsScaler, self).unscale(userrating_value))
 
 
 class Mp3WindowsMediaPlayerScaler(TableScaler):
@@ -177,8 +178,10 @@ class Mp3WinampScaler(Scaler):
 
 class VorbisQuodlibetScaler(Scaler):
     """Quod Libet stores ``RATING:<email>`` in Vorbis comments as a float
-    between 0.0 and 1.0.
+    between 0.0 and 1.0 (``0.0`` is a 0 rating, unrated tracks have no
+    tag).
     """
+    ZERO_IS_UNRATED = False
 
     def __init__(self):
         super(VorbisQuodlibetScaler, self).__init__(
