@@ -14,7 +14,9 @@ The *userrating* plugin manages **per-user track ratings** in your
 * ratings are imported from / written to the files (ID3 `POPM` frames,
   Vorbis comments, M4A atoms, ASF attributes and optionally the comments
   tag), including ratings of external players (Banshee, Winamp, Windows
-  Media Player, MediaMonkey, Quod Libet).
+  Media Player, MediaMonkey, Quod Libet);
+* ratings can be proposed for unrated tracks based on the ratings of
+  similar tracks of the library (`autorate`).
 
 Album ratings are not supported yet (the design allows adding them later).
 
@@ -65,6 +67,21 @@ userrating:
     sync_external_ratings: null
     # Also store the ratings in the comments tag: no, yes or only.
     write_in_comments: no
+    # Propose ratings for unrated tracks (see "Automatic rating proposals").
+    autorate:
+        # Propose ratings at import.
+        auto: no
+        # User whose ratings are proposed (default: default_user).
+        user: null
+        # Similarity strategies (the "same artist and title" one is always
+        # enabled).
+        mbtrackid: yes      # same MusicBrainz release track / recording
+        acoustid: yes       # same AcoustID fingerprint
+        bareascii: no       # same artist and title in bare ASCII (bareasc plugin)
+        fuzzy: no           # fuzzily matching artist and title (fuzzy plugin)
+        # Review all the proposals at once, at the end of the import or
+        # command, instead of one track at a time.
+        global_review: no
 ```
 
 ## Usage
@@ -208,6 +225,131 @@ At import (`auto: yes`) or with `beet userrating --import`, for each track:
   beets tags or database.
 * To support another player storing its rating in a `POPM` frame, add a
   scaler and a `Player` entry in `beetsplug/userrating/scalers.py`.
+
+## Automatic rating proposals (autorate)
+
+When a track has not been rated yet by a user, the plugin can propose a
+rating based on the tracks of the library that are similar to it and that
+this user already rated: the same song in another format, another release
+of the same recording, a live version you probably like the same...
+
+It runs at import (`autorate: {auto: yes}`) and with the `beet autorate`
+command:
+
+    beet autorate [QUERY]                 # review proposals for unrated tracks
+    beet autorate -p [QUERY]              # pretend: only show the proposals
+    beet autorate -y [QUERY]              # apply the proposed ratings without asking
+    beet autorate -u toto [QUERY]         # propose toto's ratings
+    beet autorate -g [QUERY]              # global review (all proposals at the end)
+    beet autorate --fuzzy --no-acoustid   # enable/disable similarity strategies
+    beet autorate -w / -W                 # write / don't write ratings to files
+
+### 1. Unrated tracks
+
+The chosen user is the `-u/--user` option, otherwise the `autorate.user`
+option, otherwise the `default_user`. A track is a candidate when this user
+has no rating for it:
+
+* not in the beets library,
+* nor in its file: neither in the beets users' tags nor, for the default
+  user, in the tags of the `external_music_players` (a track rated in its
+  file is skipped with a hint to run `beet userrating --import`; at import
+  with `auto: yes`, these ratings have just been imported).
+
+### 2. Finding similar rated tracks
+
+Similar tracks are looked for in the library with the following
+strategies, by order of priority. Only the tracks rated by the chosen user
+are considered (and never the track itself). The first strategy finding
+at least one similar track wins; the next ones are not tried.
+
+| # | Strategy | Finds | Option |
+| - | -------- | ----- | ------ |
+| 1 | same MusicBrainz release track id (`mb_releasetrackid`) | the same track of the same release, e.g. in another format | `mbtrackid` |
+| 2 | same MusicBrainz recording id (`mb_trackid`) | the same recording on another release (compilation, reissue...) | `mbtrackid` |
+| 3 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio | `acoustid` |
+| 4 | same artist and title (case-insensitive) | albums imported as-is (no MusicBrainz ids), other albums, other versions of the song you potentially like the same | always |
+| 5 | same artist and title in bare ASCII (accents removed, case-insensitive) | accents wrong in the library or in the CD information | `bareascii` (requires the `bareasc` plugin) |
+| 6 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; scans the whole library, slower) |
+
+Strategies whose fields are empty on the track are skipped. Enabling
+`bareascii` or `fuzzy` without loading the corresponding plugin logs a
+warning and skips the strategy.
+
+### 3. Proposal and review
+
+The similar tracks are displayed grouped by rating, the most frequent
+rating first, and the **most frequent rating** is proposed (ties are
+broken by the highest rating):
+
+    the artist - the album - song [FLAC]
+      not rated by djhibee; 3 similar items rated by djhibee (same MusicBrainz recording):
+        8 (2 items):
+          - the artist - the album - song [MP3]
+          - the artist - best of - song [MP3]
+        6 (1 item):
+          - the artist - live - song [MP3]
+      proposed rating: 8
+    Rating of djhibee (0-10, Enter for 8), Skip or fiX (rate similar items too)?
+
+Choices:
+
+* **Enter**: rate the track with the proposed rating;
+* **a number from 0 to 10**: rate the track with this rating (it does not
+  need to be one of the similar tracks' ratings);
+* **S** (skip): leave the track unrated;
+* **X** (fix): unify the ratings: the rating to use is asked (the most
+  frequent one by default), then the track **and all its similar tracks**
+  are rated with it.
+
+With `-p/--pretend`, proposals are only displayed. With `-y/--yes`, the
+proposed ratings are applied without asking. At import in quiet mode
+(`import -q`), proposals are skipped.
+
+With **global review** (`global_review: yes` or `-g`), all the proposals
+are first computed, then reviewed one after the other at the end of the
+command or of the import (the import is not interrupted by questions).
+Note that proposals are computed before any of them is applied. Without
+it, each proposal is reviewed as soon as it is found, so a track rated
+during the review can be used for the next proposals. At import, global
+review is recommended, as questions would otherwise be mixed with the
+importer's ones.
+
+### 4. Rating
+
+The chosen ratings are stored in the library like with `beet userrating
+--modify`, and written to the files according to the `write` options
+(`-w/-W` for the command). At import, the imported tracks' ratings are
+written along with their other tags by the importer.
+
+### Reusing the similarity search in another plugin
+
+The search is available as a parameterized function (also available as
+`getSimilarItems`):
+
+```python
+from beetsplug.userrating.similar import get_similar_items
+
+found = get_similar_items(
+    lib, item,
+    strategies=['mb_trackid', 'acoustid'],  # default: all, in priority order
+    format='FLAC',                          # field=value filters...
+    bitrate=lambda b: b >= 320000,          # ...or field=function filters
+    query='^genre:podcast',                 # beets query the results must match
+    predicate=lambda i: i.length > 60,      # any other check
+)
+if found:
+    print(found.strategy.label, found.items)
+```
+
+It returns the similar items found by the first strategy giving results
+(`all_strategies=True` returns the results of all strategies). Field
+filters accept any item field, including flexible attributes and other
+plugins' computed fields. Custom strategies may be passed as
+`beetsplug.userrating.similar.Strategy` objects. For instance, a plugin
+pairing lossy and lossless versions of tracks could call
+`get_similar_items(lib, item, quality=chosen_quality)` (where `quality` is
+a field it computes) and pick the best of the returned items.
 
 ## Development
 

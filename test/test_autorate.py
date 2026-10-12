@@ -108,9 +108,9 @@ def test_bareascii_and_fuzzy_require_plugins(env):
 
 
 def test_proposed_rating():
-    class I(dict):
+    class FakeItem(dict):
         pass
-    items = [I(userrating={'a': r}) for r in (3, 5, 5, 3, 2)]
+    items = [FakeItem(userrating={'a': r}) for r in (3, 5, 5, 3, 2)]
     # ties are broken by the highest rating
     assert autorate.proposed_rating(items, 'a') == 5
     assert autorate.proposed_rating(items, 'b') is None
