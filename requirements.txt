@@ -1,4 +1,3 @@
 beets>=2.0
 mutagen
 mediafile
-pytest

@@ -97,14 +97,16 @@ class Mp3BeetsScaler(Scaler):
 
 
 class Mp3WindowsMediaPlayerScaler(TableScaler):
-    """Windows Media Player 9, 10, 11, 12 compliant scaler::
+    """Windows Media Player 9, 10, 11, 12 compliant scaler (5 stars,
+    so the mapping from the 0-10 scale is lossy: odd values are rounded
+    down when read back)::
 
-        0 → POPM=0 (unrated)
-        1 → POPM=1
-        2 → POPM=64
-        3 → POPM=128
-        4 → POPM=196
-        5 → POPM=255
+        0-1  → POPM=0     (unrated)
+        2-3  → POPM=1     (1 star)
+        4-5  → POPM=64    (2 stars)
+        6-7  → POPM=128   (3 stars)
+        8-9  → POPM=196   (4 stars)
+        10   → POPM=255   (5 stars)
     """
     _rating_table = [0, 0, 1, 1, 64, 64, 128, 128, 196, 196, 255]
 

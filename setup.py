@@ -1,11 +1,14 @@
 from setuptools import setup
 
+with open('README.md', encoding='utf-8') as readme:
+    README = readme.read()
+
 setup(
     name='beets-userrating',
     author='djhibee (based on the work of Jean-Philippe Hautin)',
     description="A plugin for managing per-user track ratings in the music "
                 "geek's media organizer",
-    long_description=open('README.md').read(),
+    long_description=README,
     long_description_content_type='text/markdown',
     install_requires=['beets >= 2.0', 'mutagen', 'mediafile'],
     extras_require={'test': ['pytest']},
