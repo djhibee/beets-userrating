@@ -95,6 +95,15 @@ Note that per-user fields need braces: `${userrating[djhibee]}`
 (`$userrating[djhibee]` would be read as `$userrating` followed by the
 text `[djhibee]`). Unrated values are displayed as an empty string.
 
+Per-user fields are available for the `beets_users` and for every user
+having ratings in the library. To keep startup fast, the user names are
+cached in a `userrating_users` table of the library database: the
+library is scanned only once (when this table is created) and the cache
+is then updated whenever ratings are stored. Users whose ratings were all
+removed stay in the cache (their field is simply empty); drop the table
+(`sqlite3 library.db 'DROP TABLE userrating_users'`) to rebuild it on
+the next run.
+
 ### `beet modify`
 
 Assignments (`field=value`) accept the same formats as queries but

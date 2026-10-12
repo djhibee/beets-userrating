@@ -261,3 +261,30 @@ def test_import_stage(env):
 def test_auto_disabled(env):
     env.setup({'auto': False})
     assert env.plugin.import_stages == []
+
+
+def _cached_users(env):
+    with env.lib.transaction() as tx:
+        return sorted(row[0] for row in
+                      tx.query('SELECT user FROM userrating_users'))
+
+
+def test_users_cache(env):
+    env.add_item(title='one', userrating=UserRatings({'scanned': 3}))
+    # The first run scans the library and creates the cache.
+    env.run('ls', '-f', '${userrating[scanned]}')
+    assert _cached_users(env) == ['scanned']
+
+    # Stored ratings update the cache.
+    env.run('userrating', '-m', '-u', 'newuser', '-r', '5')
+    assert _cached_users(env) == ['newuser', 'scanned']
+    env.run('modify', '-y', "userrating={'other':1}")
+    assert _cached_users(env) == ['newuser', 'other', 'scanned']
+
+    # Later runs only read the cache instead of scanning the library.
+    with env.lib.transaction() as tx:
+        tx.mutate('UPDATE item_attributes SET value = ? WHERE key = ?',
+                  ('{"hidden": 1}', 'userrating'))
+    env.setup({'beets_users': ['djhibee', 'toto']})
+    out = env.run('ls', '-f', '${userrating[other]}|${userrating[hidden]}')
+    assert out == '|${userrating[hidden]}\n'

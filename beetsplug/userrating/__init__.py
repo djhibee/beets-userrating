@@ -57,6 +57,8 @@ __all__ = ['UserRatingsPlugin', 'UserRatings', 'UserRatingsType',
            'UserRatingQuery']
 
 FIELD = u'userrating'
+#: Library table caching the names of the users having ratings.
+USERS_TABLE = u'userrating_users'
 
 
 def _stored_ratings(item):
@@ -95,6 +97,9 @@ class UserRatingsPlugin(BeetsPlugin):
 
         self.register_listener('after_write', self.on_after_write)
         self.register_listener('library_opened', self.on_library_opened)
+        self.register_listener('database_change', self.on_database_change)
+        self._cache_lib = None
+        self._cached_users = set()
 
         # `$userrating` is backed by a computed field reading the flexible
         # attribute so that unrated items are formatted as an empty string
