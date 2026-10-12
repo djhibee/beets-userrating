@@ -118,13 +118,60 @@ class UserRatingsPlugin(BeetsPlugin):
                 lambda item, user=user: as_ratings(item.get(FIELD)).get(user)
 
     def on_library_opened(self, lib):
+        """Register the template fields of the users having ratings in
+        the library.
+
+        The user names are cached in the ``userrating_users`` table so
+        that the (potentially slow) scan of all the ratings is only done
+        once, when the cache table is created. The cache is then kept up
+        to date on each database change.
+        """
+        self._cache_lib = None
+        self._cached_users = set()
         with lib.transaction() as tx:
-            rows = tx.query(
-                'SELECT DISTINCT value FROM item_attributes WHERE key = ?',
-                (FIELD,))
-        for row in rows:
-            for user in USER_RATINGS_TYPE.from_sql(row[0]):
-                self.register_user(user)
+            exists = tx.query(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                "AND name = ?", (USERS_TABLE,))
+            if exists:
+                users = {row[0] for row in tx.query(
+                    'SELECT user FROM {0}'.format(USERS_TABLE))}
+            else:
+                users = set()
+                for row in tx.query(
+                        'SELECT DISTINCT value FROM item_attributes '
+                        'WHERE key = ?', (FIELD,)):
+                    users.update(USER_RATINGS_TYPE.from_sql(row[0]))
+                tx.mutate('CREATE TABLE IF NOT EXISTS {0} '
+                          '(user TEXT PRIMARY KEY)'.format(USERS_TABLE))
+                self._cache_users(tx, users)
+        self._cache_lib = lib
+        self._cached_users = users
+        for user in users:
+            self.register_user(user)
+
+    @staticmethod
+    def _cache_users(tx, users):
+        for user in users:
+            tx.mutate('INSERT OR IGNORE INTO {0} (user) VALUES (?)'
+                      .format(USERS_TABLE), (user,))
+
+    def on_database_change(self, lib, model):
+        """Register and cache the users of a stored model's ratings."""
+        values = getattr(model, '_values_flex', {})
+        if FIELD not in values:
+            return
+        new = [user for user in as_ratings(values[FIELD])
+               if user not in self._cached_users]
+        if not new:
+            return
+        for user in new:
+            self.register_user(user)
+        # Only the library whose cache was loaded is updated (another
+        # library would not have been scanned).
+        if lib is not None and lib is self._cache_lib:
+            with lib.transaction() as tx:
+                self._cache_users(tx, new)
+            self._cached_users.update(new)
 
     # Commands --------------------------------------------------------
 
