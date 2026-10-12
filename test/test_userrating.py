@@ -1,4 +1,8 @@
+import logging
 import os
+from types import SimpleNamespace
+
+from beets import config
 import beets.plugins
 import mutagen
 import pytest
@@ -248,15 +252,66 @@ def test_import_external_players_priority(env, copy_rsrc):
     assert _ratings(env)['one'] == {}
 
 
-def test_import_stage(env):
+@pytest.mark.parametrize('verbosity', [0, 1, 3])
+def test_import_stage(env, verbosity):
+    config['verbose'] = verbosity
+    original = env.add_item(title='one', ext='flac')
     item = env.add_item(title='one', fixture='full-with-wmp-rating')
+    beets.plugins.send('library_opened', lib=env.lib)
 
     class Task(object):
         def imported_items(self):
             return [item]
 
-    env.plugin.imported(None, Task())
-    assert _ratings(env) == {'one': {'djhibee': 8}}
+    env.plugin.get_import_stages()[0](SimpleNamespace(lib=env.lib), Task())
+    assert env.reload(item)['userrating'] == {'djhibee': 8}
+    assert 'userrating' not in env.reload(original)._values_flex
+    assert _cached_users(env) == ['djhibee']
+    assert env.plugin._log.level == logging.NOTSET
+
+
+@pytest.mark.parametrize('verbosity', [0, 1, 3])
+@pytest.mark.parametrize('raises', [False, True])
+def test_nested_callback_log_levels(env, verbosity, raises):
+    config['verbose'] = verbosity
+    plugin = env.plugin
+    outer_level = max(logging.DEBUG, logging.WARNING - 10 * verbosity)
+    inner_level = max(logging.DEBUG, logging.ERROR - 10 * verbosity)
+    env.monkeypatch.setattr(plugin._log, 'level', logging.INFO)
+
+    def inner(value):
+        assert plugin._log.level == inner_level
+        if raises:
+            raise ValueError('callback failed')
+        return value
+
+    wrapped_inner = plugin._set_log_level_and_params(logging.ERROR, inner)
+
+    def outer():
+        assert plugin._log.level == outer_level
+        try:
+            return wrapped_inner(value=8, future_event_argument=True)
+        finally:
+            assert plugin._log.level == outer_level
+
+    wrapped_outer = plugin._set_log_level_and_params(logging.WARNING, outer)
+    assert wrapped_outer.__name__ == outer.__name__
+    if raises:
+        with pytest.raises(ValueError, match='callback failed'):
+            wrapped_outer()
+    else:
+        assert wrapped_outer() == 8
+    assert plugin._log.level == logging.INFO
+
+
+def test_callback_accepts_extra_keyword_arguments(env):
+    def callback(**kwargs):
+        return kwargs
+
+    wrapped = env.plugin._set_log_level_and_params(logging.WARNING, callback)
+    assert wrapped(future_event_argument=True) == {
+        'future_event_argument': True}
+    assert env.plugin._log.level == logging.NOTSET
 
 
 def test_auto_disabled(env):
