@@ -74,9 +74,14 @@ userrating:
         # User whose ratings are proposed (default: default_user).
         user: null
         # Similarity strategies (the "same artist and title" one is always
-        # enabled).
-        mbtrackid: yes      # same MusicBrainz release track / recording
-        acoustid: yes       # same AcoustID / AcoustID fingerprint
+        # enabled). A strategy of a group is used only when both the group
+        # option and its own option are enabled.
+        mbtrackid: yes              # group: both MusicBrainz strategies
+        mb_releasetrackid: yes      #   same MusicBrainz release track
+        mb_trackid: yes             #   same MusicBrainz recording
+        acoustid: yes               # group: both AcoustID strategies
+        acoustid_id: yes            #   same AcoustID
+        acoustid_fingerprint: yes   #   same AcoustID fingerprint
         bareascii: no       # same artist and title in bare ASCII (bareasc plugin)
         fuzzy: no           # fuzzily matching artist and title (fuzzy plugin)
         # Review all the proposals at once, at the end of the import or
@@ -242,6 +247,7 @@ command:
     beet autorate -u toto [QUERY]         # propose toto's ratings
     beet autorate -g [QUERY]              # global review (all proposals at the end)
     beet autorate --fuzzy --no-acoustid   # enable/disable similarity strategies
+    beet autorate --no-acoustid-fingerprint --no-mb-trackid  # ... individually
     beet autorate -w / -W                 # write / don't write ratings to files
 
 ### 1. Unrated tracks
@@ -265,13 +271,27 @@ at least one similar track wins; the next ones are not tried.
 
 | # | Strategy | Finds | Option |
 | - | -------- | ----- | ------ |
-| 1 | same MusicBrainz release track id (`mb_releasetrackid`) | the same track of the same release, e.g. in another format | `mbtrackid` |
-| 2 | same MusicBrainz recording id (`mb_trackid`) | the same recording on another release (compilation, reissue...) | `mbtrackid` |
-| 3 | same AcoustID (`acoustid_id`, set by the `chroma` plugin) | the same audio, even encoded differently: AcoustID groups the slightly different fingerprints of the same recording under one id | `acoustid` |
-| 4 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio, when the AcoustID lookup gave no id (fingerprints of different encodings rarely match exactly) | `acoustid` |
+| 1 | same MusicBrainz release track id (`mb_releasetrackid`) | the same track of the same release, e.g. in another format | `mbtrackid` and `mb_releasetrackid` |
+| 2 | same MusicBrainz recording id (`mb_trackid`) | the same recording on another release (compilation, reissue...) | `mbtrackid` and `mb_trackid` |
+| 3 | same AcoustID (`acoustid_id`, set by the `chroma` plugin) | the same audio, even encoded differently: AcoustID groups the slightly different fingerprints of the same recording under one id | `acoustid` and `acoustid_id` |
+| 4 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio, when the AcoustID lookup gave no id (fingerprints of different encodings rarely match exactly) | `acoustid` and `acoustid_fingerprint` |
 | 5 | same artist and title (case-insensitive) | albums imported as-is (no MusicBrainz ids), other albums, other versions of the song you potentially like the same | always |
 | 6 | same artist and title in bare ASCII (accents removed, case-insensitive) | accents wrong in the library or in the CD information | `bareascii` (requires the `bareasc` plugin) |
 | 7 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; scans the whole library, slower) |
+
+Each option has a `--<option>` / `--no-<option>` command flag (underscores
+written as dashes, e.g. `--no-acoustid-fingerprint`) overriding the
+configuration. A strategy's own flag wins over its group flag:
+`--no-acoustid --acoustid-id` only uses the AcoustID id.
+
+Disabling individual strategies is mostly about precision, e.g. keeping
+only `mb_releasetrackid` to rate only other copies of the very same release
+track, or dropping `acoustid_fingerprint` if exact fingerprint matches are
+useless for you. The performance gain is small for the MusicBrainz and
+AcoustID strategies: they are simple equality queries on library fields,
+and are skipped anyway when the track has no value for the field or when a
+previous strategy found similar tracks. The `fuzzy` strategy, which scans
+the whole library, is the one worth disabling for speed.
 
 Strategies whose fields are empty on the track are skipped. Enabling
 `bareascii` or `fuzzy` without loading the corresponding plugin logs a

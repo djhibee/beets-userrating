@@ -24,7 +24,7 @@ from .command import apply_ratings
 from .compat import UserError
 from .ratings import (MAX_RATING, MIN_RATING, RatingError, as_ratings,
                       validate_user)
-from .settings import AUTORATE_STRATEGIES, autorate_strategies
+from .settings import autorate_options, autorate_strategies
 from .similar import get_similar_items, get_strategy
 
 USAGE = u"""%prog [options] [QUERY...]
@@ -32,8 +32,10 @@ USAGE = u"""%prog [options] [QUERY...]
 Propose a rating for the tracks matching QUERY that the user did not rate
 yet (neither in beets nor in the files, including external players'
 ratings), based on the ratings of similar tracks of the library: same
-MusicBrainz release track or recording (--mbtrackid), same AcoustID or
-AcoustID fingerprint (--acoustid), same artist and title, same artist and
+MusicBrainz release track (--mb-releasetrackid) or recording (--mb-trackid),
+both enabled by --mbtrackid, same AcoustID (--acoustid-id) or AcoustID
+fingerprint (--acoustid-fingerprint), both enabled by --acoustid, same
+artist and title, same artist and
 title in bare ASCII (--bareascii, requires the bareasc plugin) or fuzzily
 matching (--fuzzy, requires the fuzzy plugin), in this order.
 
@@ -258,15 +260,14 @@ def build_command(plugin):
         u'-u', u'--user', dest='user', metavar='USER',
         help=u'user to rate for (default: autorate "user" option, or the '
              u'default user)')
-    for option, _ in AUTORATE_STRATEGIES:
-        if option is None:
-            continue
+    for option in autorate_options():
+        flag = option.replace(u'_', u'-')
         parser.add_option(
-            u'--' + option, dest=option, action='store_true', default=None,
+            u'--' + flag, dest=option, action='store_true', default=None,
             help=u'enable {0} matching (overrides the autorate "{0}" '
                  u'option)'.format(option))
         parser.add_option(
-            u'--no-' + option, dest=option, action='store_false',
+            u'--no-' + flag, dest=option, action='store_false',
             help=u'disable {0} matching'.format(option))
     parser.add_option(
         u'-g', u'--global-review', dest='global_review',
@@ -308,13 +309,12 @@ def command_rater(plugin, lib, opts):
             user = validate_user(opts.user)
         except RatingError as exc:
             raise UserError(u'autorate: {0}'.format(exc))
-    options = dict(settings.autorate_options)
-    for option in options:
-        if getattr(opts, option) is not None:
-            options[option] = getattr(opts, option)
+    overrides = dict((option, getattr(opts, option))
+                     for option in autorate_options())
     global_review = (settings.autorate_global_review
                      if opts.global_review is None else opts.global_review)
-    return AutoRater(plugin, lib, user, autorate_strategies(options),
+    strategies = autorate_strategies(settings.autorate_options, overrides)
+    return AutoRater(plugin, lib, user, strategies,
                      plugin.should_write(opts.write), pretend=opts.pretend,
                      yes=opts.yes, global_review=global_review)
 

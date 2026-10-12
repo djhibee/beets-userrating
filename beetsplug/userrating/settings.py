@@ -48,8 +48,14 @@ DEFAULT_CONFIG = {
         # User whose ratings are proposed (default: the default user).
         'user': None,
         # Similarity strategies (by order of priority, see README).
+        # `mbtrackid` and `acoustid` enable/disable groups of strategies
+        # that can also be enabled/disabled independently.
         'mbtrackid': True,
+        'mb_releasetrackid': True,
+        'mb_trackid': True,
         'acoustid': True,
+        'acoustid_id': True,
+        'acoustid_fingerprint': True,
         'bareascii': False,
         'fuzzy': False,
         # Review all the proposals at once, at the end of the import or of
@@ -58,24 +64,59 @@ DEFAULT_CONFIG = {
     },
 }
 
-#: autorate options enabling similarity strategies, and the strategies
-#: they enable (see :mod:`beetsplug.userrating.similar`).
+#: Similarity strategies used by autorate, by order of priority (see
+#: :mod:`beetsplug.userrating.similar`), as ``(strategy, group option,
+#: strategy option)``: a strategy is used when both its group option and
+#: its own option are enabled (``None``: no such option).
 AUTORATE_STRATEGIES = [
-    ('mbtrackid', ['mb_releasetrackid', 'mb_trackid']),
-    ('acoustid', ['acoustid_id', 'acoustid_fingerprint']),
-    (None, ['artist_title']),
-    ('bareascii', ['bareascii']),
-    ('fuzzy', ['fuzzy']),
+    ('mb_releasetrackid', 'mbtrackid', 'mb_releasetrackid'),
+    ('mb_trackid', 'mbtrackid', 'mb_trackid'),
+    ('acoustid_id', 'acoustid', 'acoustid_id'),
+    ('acoustid_fingerprint', 'acoustid', 'acoustid_fingerprint'),
+    ('artist_title', None, None),
+    ('bareascii', 'bareascii', None),
+    ('fuzzy', 'fuzzy', None),
 ]
 
 
-def autorate_strategies(options):
-    """Names of the similarity strategies enabled by the ``options``
-    mapping (option name -> bool), by order of priority."""
+def autorate_options():
+    """Names of the options enabling/disabling autorate strategies."""
     names = []
-    for option, strategies in AUTORATE_STRATEGIES:
-        if option is None or options.get(option):
-            names.extend(strategies)
+    for _, group, option in AUTORATE_STRATEGIES:
+        for name in (group, option):
+            if name is not None and name not in names:
+                names.append(name)
+    return names
+
+
+def autorate_strategies(options, overrides=None):
+    """Names of the similarity strategies enabled by the ``options``
+    mapping (option name -> bool, missing options take their default
+    value), by order of priority.
+
+    ``overrides`` (option name -> bool or ``None``, e.g. command line
+    flags) take precedence over ``options``; a strategy's own option given
+    in ``overrides`` takes precedence over its group option, e.g.
+    ``--acoustid-id`` enables the AcoustID id strategy even if the
+    ``acoustid`` group is disabled.
+    """
+    overrides = dict((k, v) for k, v in (overrides or {}).items()
+                     if v is not None)
+
+    def value(name):
+        if name in overrides:
+            return overrides[name]
+        return options.get(name, DEFAULT_CONFIG['autorate'][name])
+
+    names = []
+    for strategy, group, option in AUTORATE_STRATEGIES:
+        if option is not None and option in overrides:
+            enabled = overrides[option]
+        else:
+            enabled = ((group is None or value(group))
+                       and (option is None or value(option)))
+        if enabled:
+            names.append(strategy)
     return names
 
 
@@ -183,5 +224,5 @@ class Settings(object):
             self.autorate_user = self.default_user
         self.autorate_options = dict(
             (option, bool(autorate[option].get()))
-            for option, _ in AUTORATE_STRATEGIES if option is not None)
+            for option in autorate_options())
         self.autorate_global_review = bool(autorate['global_review'].get())

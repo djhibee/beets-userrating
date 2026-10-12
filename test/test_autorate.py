@@ -74,6 +74,55 @@ def test_similar_items_strategies_priority(env):
     assert 'acoustid_id' not in autorate_strategies({'acoustid': False})
 
 
+def test_autorate_strategy_switches():
+    from beetsplug.userrating.settings import (autorate_options,
+                                               autorate_strategies)
+    assert autorate_options() == [
+        'mbtrackid', 'mb_releasetrackid', 'mb_trackid', 'acoustid',
+        'acoustid_id', 'acoustid_fingerprint', 'bareascii', 'fuzzy']
+    # defaults
+    assert autorate_strategies({}) == [
+        'mb_releasetrackid', 'mb_trackid', 'acoustid_id',
+        'acoustid_fingerprint', 'artist_title']
+    # independent switches
+    assert autorate_strategies({'mb_releasetrackid': False,
+                                'acoustid_fingerprint': False}) == [
+        'mb_trackid', 'acoustid_id', 'artist_title']
+    # group switches disable both strategies of the group
+    assert autorate_strategies({'mbtrackid': False, 'acoustid_id': True}) \
+        == ['acoustid_id', 'acoustid_fingerprint', 'artist_title']
+    # command line flags override the configuration; a strategy's own flag
+    # wins over its group flag
+    config = {'acoustid': False, 'mb_trackid': False}
+    assert autorate_strategies(config, {'acoustid_id': True}) == [
+        'mb_releasetrackid', 'acoustid_id', 'artist_title']
+    assert autorate_strategies(config, {'acoustid': True, 'mb_trackid': None,
+                                        'acoustid_fingerprint': False}) == [
+        'mb_releasetrackid', 'acoustid_id', 'artist_title']
+    assert autorate_strategies({}, {'mbtrackid': False, 'fuzzy': True}) == [
+        'acoustid_id', 'acoustid_fingerprint', 'artist_title', 'fuzzy']
+
+
+def test_autorate_independent_switches_command(env):
+    target = _add(env, 'song', mb_releasetrackid='T', acoustid_id='A',
+                  acoustid_fingerprint='F')
+    _add(env, 'x', mb_releasetrackid='T', rating=1)
+    _add(env, 'y', acoustid_id='A', rating=2)
+    _add(env, 'z', acoustid_fingerprint='F', rating=3)
+    out = env.run('autorate', '-p', '-W', '--no-mb-releasetrackid',
+                  'title:song')
+    assert '(same AcoustID):' in out
+    out = env.run('autorate', '-p', '-W', '--no-mbtrackid',
+                  '--no-acoustid-id', 'title:song')
+    assert '(same AcoustID fingerprint):' in out
+    env.setup({'beets_users': ['djhibee'],
+               'autorate': {'mb_releasetrackid': False, 'acoustid': False}})
+    out = env.run('autorate', '-p', '-W', '--acoustid-fingerprint',
+                  'title:song')
+    assert '(same AcoustID fingerprint):' in out
+    assert _rating(env, target) is None
+
+
 def test_similar_items_filters(env):
     target = _add(env, 'song')
     mp3 = _add(env, 'song')
