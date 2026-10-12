@@ -62,7 +62,7 @@ DEFAULT_CONFIG = {
 #: they enable (see :mod:`beetsplug.userrating.similar`).
 AUTORATE_STRATEGIES = [
     ('mbtrackid', ['mb_releasetrackid', 'mb_trackid']),
-    ('acoustid', ['acoustid']),
+    ('acoustid', ['acoustid_id', 'acoustid_fingerprint']),
     (None, ['artist_title']),
     ('bareascii', ['bareascii']),
     ('fuzzy', ['fuzzy']),

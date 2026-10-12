@@ -32,10 +32,10 @@ USAGE = u"""%prog [options] [QUERY...]
 Propose a rating for the tracks matching QUERY that the user did not rate
 yet (neither in beets nor in the files, including external players'
 ratings), based on the ratings of similar tracks of the library: same
-MusicBrainz release track or recording (--mbtrackid), same AcoustID
-fingerprint (--acoustid), same artist and title, same artist and title in
-bare ASCII (--bareascii, requires the bareasc plugin) or fuzzily matching
-(--fuzzy, requires the fuzzy plugin), in this order.
+MusicBrainz release track or recording (--mbtrackid), same AcoustID or
+AcoustID fingerprint (--acoustid), same artist and title, same artist and
+title in bare ASCII (--bareascii, requires the bareasc plugin) or fuzzily
+matching (--fuzzy, requires the fuzzy plugin), in this order.
 
 For each track, similar tracks are listed, grouped by rating, and the most
 frequent rating is proposed. Enter a rating (0-10, Enter for the proposed

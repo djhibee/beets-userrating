@@ -26,7 +26,8 @@ e.g. to find the lossless version of a lossy track::
 
 Similarity is evaluated by :class:`Strategy` objects, tried in order of
 priority (see :data:`STRATEGIES`): the most reliable ones first (same
-MusicBrainz release track, same recording, same AcoustID fingerprint), then
+MusicBrainz release track, same recording, same AcoustID, same AcoustID
+fingerprint), then
 the less reliable ones (same artist and title, compared exactly, in bare
 ASCII or fuzzily).
 """
@@ -167,7 +168,8 @@ STRATEGIES = [
     Strategy(u'mb_releasetrackid', u'same MusicBrainz release track',
              ('mb_releasetrackid',)),
     Strategy(u'mb_trackid', u'same MusicBrainz recording', ('mb_trackid',)),
-    Strategy(u'acoustid', u'same AcoustID fingerprint',
+    Strategy(u'acoustid_id', u'same AcoustID', ('acoustid_id',)),
+    Strategy(u'acoustid_fingerprint', u'same AcoustID fingerprint',
              ('acoustid_fingerprint',)),
     ArtistTitleStrategy(),
     BareAsciiStrategy(),

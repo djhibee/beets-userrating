@@ -76,7 +76,7 @@ userrating:
         # Similarity strategies (the "same artist and title" one is always
         # enabled).
         mbtrackid: yes      # same MusicBrainz release track / recording
-        acoustid: yes       # same AcoustID fingerprint
+        acoustid: yes       # same AcoustID / AcoustID fingerprint
         bareascii: no       # same artist and title in bare ASCII (bareasc plugin)
         fuzzy: no           # fuzzily matching artist and title (fuzzy plugin)
         # Review all the proposals at once, at the end of the import or
@@ -267,10 +267,11 @@ at least one similar track wins; the next ones are not tried.
 | - | -------- | ----- | ------ |
 | 1 | same MusicBrainz release track id (`mb_releasetrackid`) | the same track of the same release, e.g. in another format | `mbtrackid` |
 | 2 | same MusicBrainz recording id (`mb_trackid`) | the same recording on another release (compilation, reissue...) | `mbtrackid` |
-| 3 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio | `acoustid` |
-| 4 | same artist and title (case-insensitive) | albums imported as-is (no MusicBrainz ids), other albums, other versions of the song you potentially like the same | always |
-| 5 | same artist and title in bare ASCII (accents removed, case-insensitive) | accents wrong in the library or in the CD information | `bareascii` (requires the `bareasc` plugin) |
-| 6 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; scans the whole library, slower) |
+| 3 | same AcoustID (`acoustid_id`, set by the `chroma` plugin) | the same audio, even encoded differently: AcoustID groups the slightly different fingerprints of the same recording under one id | `acoustid` |
+| 4 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio, when the AcoustID lookup gave no id (fingerprints of different encodings rarely match exactly) | `acoustid` |
+| 5 | same artist and title (case-insensitive) | albums imported as-is (no MusicBrainz ids), other albums, other versions of the song you potentially like the same | always |
+| 6 | same artist and title in bare ASCII (accents removed, case-insensitive) | accents wrong in the library or in the CD information | `bareascii` (requires the `bareasc` plugin) |
+| 7 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; scans the whole library, slower) |
 
 Strategies whose fields are empty on the track are skipped. Enabling
 `bareascii` or `fuzzy` without loading the corresponding plugin logs a
@@ -332,7 +333,7 @@ from beetsplug.userrating.similar import get_similar_items
 
 found = get_similar_items(
     lib, item,
-    strategies=['mb_trackid', 'acoustid'],  # default: all, in priority order
+    strategies=['mb_trackid', 'acoustid_id'],  # default: all, in priority order
     format='FLAC',                          # field=value filters...
     bitrate=lambda b: b >= 320000,          # ...or field=function filters
     query='^genre:podcast',                 # beets query the results must match

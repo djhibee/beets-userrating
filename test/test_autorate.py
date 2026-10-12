@@ -6,7 +6,8 @@ from beetsplug.userrating import autorate
 from beetsplug.userrating.similar import (STRATEGIES, Strategy,
                                           get_similar_items, getSimilarItems)
 
-IDS = ('mb_releasetrackid', 'mb_trackid', 'acoustid_fingerprint')
+IDS = ('mb_releasetrackid', 'mb_trackid', 'acoustid_id',
+       'acoustid_fingerprint')
 
 
 def _add(env, title, artist='artist', rating=None, fixture='full', ext='mp3',
@@ -40,9 +41,10 @@ def answers(monkeypatch):
 
 def test_similar_items_strategies_priority(env):
     target = _add(env, 'song', mb_releasetrackid='T', mb_trackid='R',
-                  acoustid_fingerprint='F')
+                  acoustid_id='A', acoustid_fingerprint='F')
     same_track = _add(env, 'other', mb_releasetrackid='T')
     same_recording = _add(env, 'other', mb_trackid='R')
+    same_acoustid = _add(env, 'other', acoustid_id='A')
     same_fingerprint = _add(env, 'other', acoustid_fingerprint='F')
     same_title = _add(env, 'SONG')
     _add(env, 'song', artist='someone else')
@@ -59,9 +61,17 @@ def test_similar_items_strategies_priority(env):
     assert [(r.strategy.name, [i.id for i in r.items]) for r in found] == [
         ('mb_releasetrackid', [same_track.id]),
         ('mb_trackid', [same_recording.id]),
-        ('acoustid', [same_fingerprint.id]),
+        ('acoustid_id', [same_acoustid.id]),
+        ('acoustid_fingerprint', [same_fingerprint.id]),
         ('artist_title', [same_title.id])]
     assert getSimilarItems is get_similar_items
+
+    # --no-acoustid disables both AcoustID strategies
+    from beetsplug.userrating.settings import autorate_strategies
+    assert autorate_strategies({'mbtrackid': True, 'acoustid': True}) == [
+        'mb_releasetrackid', 'mb_trackid', 'acoustid_id',
+        'acoustid_fingerprint', 'artist_title']
+    assert 'acoustid_id' not in autorate_strategies({'acoustid': False})
 
 
 def test_similar_items_filters(env):
