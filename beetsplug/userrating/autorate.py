@@ -223,7 +223,7 @@ class AutoRater(object):
                     proposal.user, MIN_RATING, MAX_RATING),
                 fallback_prompt=u'Enter a rating ({0}-{1}) or S:'.format(
                     MIN_RATING, MAX_RATING))
-            if choice != u's':
+            if choice is not None and choice != u's':
                 self.rate(proposal, choice)
             return
         choice = ui.input_options(
