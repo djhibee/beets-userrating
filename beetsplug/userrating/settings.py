@@ -41,7 +41,42 @@ DEFAULT_CONFIG = {
     'default_user': None,
     # Also store ratings in the comments tag: no, yes or only.
     'write_in_comments': COMMENTS_NO,
+    # Propose ratings for unrated items based on similar rated items.
+    'autorate': {
+        # Propose ratings at import.
+        'auto': False,
+        # User whose ratings are proposed (default: the default user).
+        'user': None,
+        # Similarity strategies (by order of priority, see README).
+        'mbtrackid': True,
+        'acoustid': True,
+        'bareascii': False,
+        'fuzzy': False,
+        # Review all the proposals at once, at the end of the import or of
+        # the command, instead of one item at a time.
+        'global_review': False,
+    },
 }
+
+#: autorate options enabling similarity strategies, and the strategies
+#: they enable (see :mod:`beetsplug.userrating.similar`).
+AUTORATE_STRATEGIES = [
+    ('mbtrackid', ['mb_releasetrackid', 'mb_trackid']),
+    ('acoustid', ['acoustid']),
+    (None, ['artist_title']),
+    ('bareascii', ['bareascii']),
+    ('fuzzy', ['fuzzy']),
+]
+
+
+def autorate_strategies(options):
+    """Names of the similarity strategies enabled by the ``options``
+    mapping (option name -> bool), by order of priority."""
+    names = []
+    for option, strategies in AUTORATE_STRATEGIES:
+        if option is None or options.get(option):
+            names.extend(strategies)
+    return names
 
 
 class ConfigError(ValueError):
@@ -135,3 +170,18 @@ class Settings(object):
             raise ConfigError(u'write_in_comments must be one of no, yes, '
                               u'only (got {0!r})'.format(comments))
         self.comments = comments
+
+        autorate = config['autorate']
+        self.autorate_auto = bool(autorate['auto'].get())
+        user = autorate['user'].get()
+        if user:
+            try:
+                self.autorate_user = validate_user(str(user))
+            except RatingError as exc:
+                raise ConfigError(u'autorate.user: {0}'.format(exc))
+        else:
+            self.autorate_user = self.default_user
+        self.autorate_options = dict(
+            (option, bool(autorate[option].get()))
+            for option, _ in AUTORATE_STRATEGIES if option is not None)
+        self.autorate_global_review = bool(autorate['global_review'].get())

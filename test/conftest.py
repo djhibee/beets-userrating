@@ -41,7 +41,7 @@ class Env(object):
         self.libdir.mkdir()
         self.lib = None
 
-    def setup(self, plugin_config=None):
+    def setup(self, plugin_config=None, plugins=()):
         _unload_plugins()
         config.clear()
         config.read(user=False, defaults=True)
@@ -52,7 +52,7 @@ class Env(object):
         if 'create_backup_before_migrations' in config.keys():
             config['create_backup_before_migrations'] = False
         config['userrating'].set(plugin_config or {})
-        config['plugins'] = ['userrating']
+        config['plugins'] = ['userrating'] + list(plugins)
         beets.plugins.load_plugins()
         _reset_caches()
         if self.lib is None:

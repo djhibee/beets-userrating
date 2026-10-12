@@ -43,7 +43,7 @@ from beets import config, ui
 from beets.plugins import BeetsPlugin
 from beets.util import displayable_path, syspath
 
-from . import storage
+from . import autorate, storage
 from .command import build_command
 from .compat import UserError
 from .ratings import (USER_RATINGS_TYPE, UserRatingQuery, UserRatings,
@@ -92,8 +92,10 @@ class UserRatingsPlugin(BeetsPlugin):
             raise UserError(u'userrating: {0}'.format(exc))
         UserRatings.default_user = self.settings.default_user
 
-        if self.settings.auto:
+        if self.settings.auto or self.settings.autorate_auto:
             self.import_stages = [self.imported]
+        self._import_rater = None
+        self.register_listener('import', self.on_import_end)
 
         self.register_listener('after_write', self.on_after_write)
         self.register_listener('library_opened', self.on_library_opened)
@@ -181,7 +183,7 @@ class UserRatingsPlugin(BeetsPlugin):
     # Commands --------------------------------------------------------
 
     def commands(self):
-        return [build_command(self)]
+        return [build_command(self), autorate.build_command(self)]
 
     # Files -----------------------------------------------------------
 
@@ -280,9 +282,26 @@ class UserRatingsPlugin(BeetsPlugin):
         return True
 
     def imported(self, session, task):
-        """Import stage: fetch ratings from the imported files."""
-        for item in task.imported_items():
-            if self.import_item(item):
-                self._log.info(u'imported ratings {0} for {1}',
-                               format_ratings(item[FIELD]), item)
-                item.store()
+        """Import stage: fetch ratings from the imported files, then
+        propose ratings for unrated items (autorate)."""
+        items = list(task.imported_items())
+        if self.settings.auto:
+            for item in items:
+                if self.import_item(item):
+                    self._log.info(u'imported ratings {0} for {1}',
+                                   format_ratings(item[FIELD]), item)
+                    item.store()
+        if self.settings.autorate_auto:
+            if self._import_rater is None:
+                self._import_rater = autorate.import_rater(self, session.lib)
+            for item in items:
+                # The files are written by beets after this stage (and
+                # ratings with them, see `on_after_write`).
+                self._import_rater.process(
+                    item, write=False, check_file=not self.settings.auto)
+
+    def on_import_end(self, lib, paths):
+        """Review the autorate proposals of the import (global review)."""
+        rater, self._import_rater = self._import_rater, None
+        if rater is not None:
+            rater.finish()

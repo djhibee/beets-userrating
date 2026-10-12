@@ -211,24 +211,31 @@ class RatingCommand(object):
     # Helpers ---------------------------------------------------------
 
     def _apply(self, lib, item, current, new):
-        if new == current:
-            return
-        if new:
-            item['userrating'] = new
-        elif 'userrating' in item._values_flex:
-            # Unrated: no stored value at all.
-            del item['userrating']
-        changes = [u'  userrating[{0}]: {1} -> {2}'.format(
-            user, _display(current.get(user)), _display(new.get(user)))
-            for user in sorted(set(current) | set(new))
-            if current.get(user) != new.get(user)]
-        if changes:
-            ui.print_(format(item))
-            ui.print_(u'\n'.join(changes))
-        for user in new:
-            self.plugin.register_user(user)
-        with lib.transaction():
+        apply_ratings(self.plugin, lib, item, current, new, self.write)
+
+
+def apply_ratings(plugin, lib, item, current, new, write):
+    """Replace the ``current`` ratings of ``item`` by ``new``: print the
+    changes, store the item and, if ``write``, write the ratings to its
+    file. An item without rating has no ``userrating`` attribute."""
+    if new == current:
+        return
+    if new:
+        item['userrating'] = new
+    elif 'userrating' in item._values_flex:
+        # Unrated: no stored value at all.
+        del item['userrating']
+    changes = [u'  userrating[{0}]: {1} -> {2}'.format(
+        user, _display(current.get(user)), _display(new.get(user)))
+        for user in sorted(set(current) | set(new))
+        if current.get(user) != new.get(user)]
+    if changes:
+        ui.print_(format(item))
+        ui.print_(u'\n'.join(changes))
+    for user in new:
+        plugin.register_user(user)
+    with lib.transaction():
+        item.store()
+        if write and plugin.write_item(item):
+            item.mtime = item.current_mtime()
             item.store()
-            if self.write and self.plugin.write_item(item):
-                item.mtime = item.current_mtime()
-                item.store()
