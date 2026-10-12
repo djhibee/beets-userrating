@@ -1,2 +1,3 @@
-beets
-six
+beets>=2.0
+mutagen
+mediafile

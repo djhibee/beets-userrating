@@ -1,6 +1,6 @@
 import unittest
 
-from beetsplug.userrating import Mp3BansheeScaler
+from beetsplug.userrating.scalers import Mp3BansheeScaler
 
 
 class BansheeScalerTest(unittest.TestCase):
