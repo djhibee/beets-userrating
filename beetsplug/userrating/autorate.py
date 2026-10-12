@@ -201,7 +201,10 @@ class AutoRater(object):
                 rating, _plural(len(items), u'item')))
             for item in items:
                 ui.print_(u'      - {0}'.format(_describe(item)))
-        ui.print_(u'  proposed rating: {0}'.format(proposal.rating))
+        if proposal.rating is None:
+            ui.print_(u'  no rating proposed')
+        else:
+            ui.print_(u'  proposed rating: {0}'.format(proposal.rating))
 
     def review(self, proposal):
         self.show(proposal)

@@ -195,6 +195,7 @@ def test_autorate_without_similar_prompts_for_manual_rating(env, answers):
     out = env.run('autorate', '-W', 'id:{0}'.format(target.id))
 
     assert 'no similar items rated by djhibee' in out
+    assert 'no rating proposed' in out
     assert 'Rating of djhibee (0-10), Skip?' in out
     assert _rating(env, target) == 7
     assert not answers
