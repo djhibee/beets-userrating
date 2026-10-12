@@ -1,6 +1,6 @@
 import unittest
 
-from beetsplug.userrating import Mp3WindowsMediaPlayerScaler
+from beetsplug.userrating.scalers import Mp3WindowsMediaPlayerScaler
 
 
 class WindowsMediaPlayerScalerTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 import unittest
 
-from beetsplug.userrating import Mp3MediaMonkeyScaler
+from beetsplug.userrating.scalers import Mp3MediaMonkeyScaler
 
 
 class MediaMonkeyScalerTest(unittest.TestCase):
