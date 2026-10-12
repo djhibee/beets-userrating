@@ -207,6 +207,10 @@ class UserRatingsPlugin(BeetsPlugin):
                 sync_players=self.settings.sync_players,
                 comments=self.settings.comments,
                 id3v23=config['id3v23'].get(bool))
+        except storage.UnsupportedFormatError:
+            self._log.debug(u'ratings not written, unsupported format: {0}',
+                            displayable_path(path))
+            return False
         except storage.FILE_ERRORS as exc:
             self._log.error(u'could not write ratings to {0}: {1}',
                             displayable_path(item.path), exc)
@@ -233,6 +237,10 @@ class UserRatingsPlugin(BeetsPlugin):
         try:
             found = storage.read_file(syspath(item.path),
                                       self.settings.beets_users)
+        except storage.UnsupportedFormatError:
+            self._log.debug(u'ratings not read, unsupported format: {0}',
+                            displayable_path(item.path))
+            return None
         except storage.FILE_ERRORS as exc:
             self._log.error(u'could not read ratings from {0}: {1}',
                             displayable_path(item.path), exc)

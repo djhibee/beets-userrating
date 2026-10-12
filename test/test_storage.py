@@ -1,6 +1,9 @@
+import shutil
+
 import mutagen
+import pytest
 from mutagen.id3 import POPM
-from mutagen.mp4 import MP4Tags
+from mutagen.mp4 import MP4, MP4Tags
 
 from beetsplug.userrating import storage
 
@@ -99,6 +102,26 @@ def test_mp4_tags_roundtrip():
     assert storage.read_tags(tags) == ({'DjHibee': 6, 'toto': 0}, {})
     storage.write_user_tags(tags, {'toto': 1})
     assert storage.read_tags(tags) == ({'toto': 1}, {})
+
+
+def test_m4a_file_roundtrip(copy_rsrc):
+    path = copy_rsrc('full.m4a')
+    storage.write_file(path, {'DjHibee': 6, 'toto': 0}, 'DjHibee',
+                       comments=storage.COMMENTS_YES)
+    found = storage.read_file(path)
+    assert found.beets == {'DjHibee': 6, 'toto': 0}
+    assert found.comment == {'DjHibee': 6, 'toto': 0}
+    assert '----:com.apple.iTunes:RATING:beets-toto' in MP4(path).tags
+
+
+def test_mp4_file_not_supported(tmp_path, copy_rsrc):
+    path = str(tmp_path / 'video.mp4')
+    shutil.copy(copy_rsrc('full.m4a'), path)
+    with pytest.raises(storage.UnsupportedFormatError):
+        storage.write_file(path, {'toto': 3}, 'toto')
+    with pytest.raises(storage.UnsupportedFormatError):
+        storage.read_file(path)
+    assert not any(key.startswith('----:') for key in MP4(path).tags)
 
 
 def test_update_comment():

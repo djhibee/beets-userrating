@@ -1,3 +1,4 @@
+import os
 import beets.plugins
 import mutagen
 import pytest
@@ -288,3 +289,26 @@ def test_users_cache(env):
     env.setup({'beets_users': ['djhibee', 'toto']})
     out = env.run('ls', '-f', '${userrating[other]}|${userrating[hidden]}')
     assert out == '|${userrating[hidden]}\n'
+
+
+def _mp4_ratings(path):
+    tags = mutagen.File(path).tags
+    return {key: bytes(tags[key][0]) for key in tags.keys()
+            if key.startswith('----:')}
+
+
+def test_m4a_supported_mp4_skipped(env):
+    m4a = env.add_item(title='audio', fixture='full', ext='m4a')
+    env.run('userrating', '-m', '-u', 'toto', '-r', '7', 'title:audio')
+    assert _mp4_ratings(env.reload(m4a).path) == {
+        '----:com.apple.iTunes:RATING:beets-toto': b'7'}
+
+    mp4 = env.add_item(title='video', fixture='full', ext='m4a')
+    mp4_path = mp4.path[:-len(b'.m4a')] + b'.mp4'
+    os.rename(mp4.path, mp4_path)
+    mp4.path = mp4_path
+    mp4.store()
+    env.run('userrating', '-m', '-u', 'toto', '-r', '5', 'title:video')
+    env.run('userrating', '--import', '-f', 'title:video')
+    assert _mp4_ratings(mp4_path) == {}
+    assert env.reload(mp4)['userrating'] == {'toto': 5}

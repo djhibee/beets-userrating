@@ -26,13 +26,16 @@ Storage formats
   WavPack, Monkey's Audio) and ASF (WMA): one ``RATING:beets-<user>`` tag
   per user holding the rating as a plain 0-10 integer. This mimics the
   ``RATING:<email>`` convention used by Quod Libet for Vorbis comments.
-* MP4 (AAC, ALAC): one freeform atom
+* M4A (AAC, ALAC): one freeform atom
   ``----:com.apple.iTunes:RATING:beets-<user>`` per user holding the
-  rating as a plain 0-10 integer.
+  rating as a plain 0-10 integer. Other MP4 container files (``.mp4``
+  videos, ``.m4b``...) are not supported: their ratings are neither read
+  nor written.
 * Optionally, all formats: a marker appended to the comments tag, like
   ``[beets-userrating: user1=3, user2=4]``.
 """
 
+import os
 import re
 
 from mutagen import MutagenError
@@ -40,7 +43,7 @@ from mutagen._vorbis import VComment
 from mutagen.apev2 import APEv2
 from mutagen.asf import ASFDWordAttribute, ASFTags
 from mutagen.id3 import ID3, POPM
-from mutagen.mp4 import AtomDataType, MP4FreeForm, MP4Tags
+from mutagen.mp4 import MP4, AtomDataType, MP4FreeForm, MP4Tags
 
 try:
     import mediafile
@@ -63,10 +66,17 @@ _COMMENT_RE = re.compile(r'\[' + re.escape(COMMENT_MARKER) + r':([^\]]*)\]')
 # The marker and the blanks/line break separating it from the comment.
 _COMMENT_REMOVE_RE = re.compile(r'[ \t]*\n?[ \t]*' + _COMMENT_RE.pattern)
 
+#: Extensions of the supported MP4 container files.
+MP4_EXTENSIONS = (u'.m4a',)
+
 #: Errors that may be raised while reading/writing a media file.
 FILE_ERRORS = (mediafile.UnreadableFileError, MutagenError, OSError)
 
 _BEETS_SCALER = Mp3BeetsScaler()
+
+
+class UnsupportedFormatError(Exception):
+    """The ratings of this media file can not be stored."""
 
 
 class FileRatings(object):
@@ -344,14 +354,30 @@ def update_comment(comment, ratings):
 
 # Files --------------------------------------------------------------------
 
+def is_supported(path, mgfile):
+    """Whether ratings can be stored in the (mutagen) file: MP4
+    container files are only supported as ``.m4a`` audio files."""
+    if isinstance(mgfile, MP4):
+        ext = os.path.splitext(os.fsdecode(path))[1].lower()
+        return ext in MP4_EXTENSIONS
+    return True
+
+
 def _open(path, id3v23=False):
-    return mediafile.MediaFile(path, id3v23=id3v23)
+    """Open a media file, raising :class:`UnsupportedFormatError` if
+    ratings can not be stored in it."""
+    mf = mediafile.MediaFile(path, id3v23=id3v23)
+    if not is_supported(path, mf.mgfile):
+        raise UnsupportedFormatError(
+            u'unsupported file format: {0}'.format(os.fsdecode(path)))
+    return mf
 
 
 def read_file(path, known_users=()):
     """Read all the ratings of a media file as :class:`FileRatings`.
 
-    May raise one of :data:`FILE_ERRORS`.
+    May raise :class:`UnsupportedFormatError` or one of
+    :data:`FILE_ERRORS`.
     """
     mf = _open(path)
     beets, players = read_tags(mf.mgfile.tags, known_users)
@@ -372,7 +398,8 @@ def write_file(path, ratings, default_user, sync_players=(),
     * the comments marker is added/updated if ``comments`` is ``yes`` or
       ``only``.
 
-    May raise one of :data:`FILE_ERRORS`.
+    May raise :class:`UnsupportedFormatError` or one of
+    :data:`FILE_ERRORS`.
     """
     mf = _open(path, id3v23=id3v23)
     mgfile = mf.mgfile

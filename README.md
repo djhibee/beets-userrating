@@ -10,7 +10,7 @@ The *userrating* plugin manages **per-user track ratings** in your
 * ratings can be queried, displayed and modified with human-friendly
   syntaxes;
 * ratings are imported from / written to the files (ID3 `POPM` frames,
-  Vorbis comments, MP4 atoms, ASF attributes and optionally the comments
+  Vorbis comments, M4A atoms, ASF attributes and optionally the comments
   tag), including ratings of external players (Banshee, Winamp, Windows
   Media Player, MediaMonkey, Quod Libet).
 
@@ -161,9 +161,13 @@ the file. Tags of other players are kept as-is unless synchronized (see
 | ------ | ----------- | ---------------- |
 | ID3v2 (MP3, AIFF, WAV) | one `POPM` frame per user, email `beets-<user>`, value 1-255 (POPM `0` means unrated, so a `0` rating is stored as `1`). The play counter is preserved. | `POPM` frames: `Banshee`, `rating@winamp.com` (Winamp), `Windows Media Player 9 Series` (WMP), `no@email` (MediaMonkey), `quodlibet@lists.sacredchao.net` (Quodlibet) |
 | Vorbis comments (FLAC, Ogg, Opus) | `RATING:beets-<user>=<0-10>` | `RATING:quodlibet@lists.sacredchao.net` (Quodlibet, 0.0-1.0) |
-| MP4 (AAC, ALAC) | freeform atom `----:com.apple.iTunes:RATING:beets-<user>` = `<0-10>` | - |
+| M4A (AAC, ALAC) | freeform atom `----:com.apple.iTunes:RATING:beets-<user>` = `<0-10>` | - |
 | ASF (WMA) | attribute `RATING:beets-<user>` = `<0-10>` | `WM/SharedUserRating` (WMP) |
 | APEv2 (Musepack, WavPack, Monkey's Audio) | `RATING:beets-<user>` = `<0-10>` | - |
+
+Other MP4 container files (`.mp4`, `.m4b`, `.m4v`...) are not supported:
+ratings are kept in the beets library but are neither read from nor
+written to these files. Only `.m4a` files are handled.
 
 User names may contain ASCII letters, digits, `.`, `_`, `@`, `+` and `-`.
 
