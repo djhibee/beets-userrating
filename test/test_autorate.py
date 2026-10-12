@@ -188,6 +188,18 @@ def test_autorate_pretend(env):
     assert _rating(env, target) is None
 
 
+def test_autorate_without_similar_prompts_for_manual_rating(env, answers):
+    target = _add(env, 'unmatched')
+    answers.append('7')
+
+    out = env.run('autorate', '-W', 'id:{0}'.format(target.id))
+
+    assert 'no similar items rated by djhibee' in out
+    assert 'Rating of djhibee (0-10), Skip?' in out
+    assert _rating(env, target) == 7
+    assert not answers
+
+
 def test_autorate_yes_and_options(env):
     target = _add(env, 'song', mb_trackid='R')
     _add(env, 'other', mb_trackid='R', rating=4)

@@ -313,6 +313,10 @@ broken by the highest rating):
       proposed rating: 8
     Rating of djhibee (0-10, Enter for 8), Skip or fiX (rate similar items too)?
 
+When no similar rated tracks are found, autorate asks for a rating manually
+instead. Enter a rating from 0 to 10 or choose **Skip**. With `-y/--yes`,
+tracks without a proposed rating are left unrated.
+
 Choices:
 
 * **Enter**: rate the track with the proposed rating;

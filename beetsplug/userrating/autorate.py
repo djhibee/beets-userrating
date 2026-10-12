@@ -63,8 +63,8 @@ class Proposal(object):
     def __init__(self, item, user, similar, write):
         self.item = item
         self.user = user
-        self.strategy = similar.strategy
-        self.similar = similar.items
+        self.strategy = similar.strategy if similar is not None else None
+        self.similar = similar.items if similar is not None else []
         self.write = write
         self.rating = proposed_rating(self.similar, user)
         groups = {}
@@ -147,7 +147,6 @@ class AutoRater(object):
             is not None)
         if similar is None:
             self.log.debug(u'autorate: no rated similar item for {0}', item)
-            return None
         return Proposal(item, user, similar,
                         self.write if write is None else write)
 
@@ -190,9 +189,13 @@ class AutoRater(object):
     def show(self, proposal):
         ui.print_(u'')
         ui.print_(_describe(proposal.item))
-        ui.print_(u'  not rated by {0}; {1} rated by {0} ({2}):'.format(
-            proposal.user, _plural(len(proposal.similar), u'similar item'),
-            proposal.strategy.label))
+        if proposal.similar:
+            ui.print_(u'  not rated by {0}; {1} rated by {0} ({2}):'.format(
+                proposal.user, _plural(len(proposal.similar), u'similar item'),
+                proposal.strategy.label))
+        else:
+            ui.print_(u'  not rated by {0}; no similar items rated by {0}'
+                      .format(proposal.user))
         for rating, items in proposal.groups:
             ui.print_(u'    {0} ({1}):'.format(
                 rating, _plural(len(items), u'item')))
@@ -206,10 +209,22 @@ class AutoRater(object):
             ui.print_(u'  (pretend: not rated)')
             return
         if self.yes:
-            return self.rate(proposal, proposal.rating)
+            if proposal.rating is not None:
+                return self.rate(proposal, proposal.rating)
+            return
         if not self.interactive:
             self.log.info(u'autorate: {0} not rated (non-interactive '
                           u'mode)', proposal.item)
+            return
+        if proposal.rating is None:
+            choice = ui.input_options(
+                (u'Skip',), numrange=(MIN_RATING, MAX_RATING),
+                prompt=u'Rating of {0} ({1}-{2}), Skip?'.format(
+                    proposal.user, MIN_RATING, MAX_RATING),
+                fallback_prompt=u'Enter a rating ({0}-{1}) or S:'.format(
+                    MIN_RATING, MAX_RATING))
+            if choice != u's':
+                self.rate(proposal, choice)
             return
         choice = ui.input_options(
             (u'Skip', u'fiX'), numrange=(MIN_RATING, MAX_RATING),
