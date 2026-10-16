@@ -252,6 +252,31 @@ def test_import_external_players_priority(env, copy_rsrc):
     assert _ratings(env)['one'] == {}
 
 
+def test_import_external_zero_is_unrated(env):
+    env.setup({'beets_users': ['djhibee'],
+               'external_music_players': ['Quodlibet', 'Banshee'],
+               'sync_external_ratings': 'all'})
+    item = env.add_item(title='one', ext='flac')
+    flac = mutagen.File(item.path)
+    flac['rating:quodlibet@lists.sacredchao.net'] = ['0.0']
+    flac.save()
+    env.run('userrating', '--import')
+    assert _ratings(env)['one'] == {}
+    other = env.add_item(title='two')
+    mf = mutagen.File(other.path)
+    mf.tags.add(mutagen.id3.POPM(email='Banshee', rating=0))
+    mf.save()
+    env.run('userrating', '--import')
+    assert _ratings(env)['two'] == {}
+    # unrated items are not synchronized with external players: their
+    # tags are left as-is and no tag is created
+    env.run('write', '-f')
+    assert _popm(env.reload(other)) == {'Banshee': 0}
+    tags = mutagen.File(item.path)
+    assert tags['rating:quodlibet@lists.sacredchao.net'] == ['0.0']
+    assert not any('beets-' in key.lower() for key in tags.keys())
+
+
 @pytest.mark.parametrize('verbosity', [0, 1, 3])
 def test_import_stage(env, verbosity):
     config['verbose'] = verbosity

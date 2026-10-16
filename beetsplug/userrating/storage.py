@@ -24,6 +24,7 @@ Storage formats
   unless they are synchronized.
 * In all formats, an unrated user has no tag at all: there is no stored
   value for "unrated", which keeps it distinct from a 0 rating.
+* A ``0`` rating value of an external player always means "not rated".
 * Vorbis comments (FLAC, Ogg Vorbis, Opus, Speex), APEv2 (Musepack,
   WavPack, Monkey's Audio) and ASF (WMA): one ``RATING:beets-<user>`` tag
   per user holding the rating as a plain 0-10 integer. This mimics the
@@ -128,6 +129,18 @@ def _raw_text(value):
     return value
 
 
+def _player_rating(scaler, raw):
+    """Scale the raw rating of an external player. A ``0`` (raw or
+    scaled) external value means "not rated": ``None`` is returned."""
+    try:
+        if float(raw) <= 0:
+            return None
+        rating = scaler.scale(raw)
+    except (TypeError, ValueError):
+        return None
+    return rating or None
+
+
 def _parse_text_rating(raw):
     try:
         return validate_rating(str(raw))
@@ -151,8 +164,9 @@ def _id3_read(tags, known_users):
         for player in PLAYERS.values():
             scaler = player.popm
             if scaler is not None and scaler.name == email:
-                if raw or not scaler.ZERO_IS_UNRATED:
-                    players[player.name] = scaler.scale(raw)
+                rating = _player_rating(scaler, raw)
+                if rating is not None:
+                    players[player.name] = rating
     return beets, players
 
 
@@ -206,14 +220,9 @@ def _text_read(tags, known_users, player_attr):
             continue
         for key in list(tags.keys()):
             if key.lower() == scaler.key.lower():
-                raw = _raw_text(tags[key])
-                try:
-                    value = float(raw)
-                    if value > 0 or (value == 0
-                                     and not scaler.ZERO_IS_UNRATED):
-                        players[player.name] = scaler.scale(raw)
-                except (TypeError, ValueError):
-                    pass
+                rating = _player_rating(scaler, _raw_text(tags[key]))
+                if rating is not None:
+                    players[player.name] = rating
                 break
     return beets, players
 
@@ -309,8 +318,9 @@ def write_user_tags(tags, ratings):
 
 
 def write_player_tag(tags, player, rating):
-    """Write (or remove if ``rating`` is ``None``) the rating of an
-    external player. Return ``False`` if the player does not support the
+    """Write the rating of an external player. If ``rating`` is ``None``
+    (unrated), an existing rating tag of the player is removed but no tag
+    is ever created. Return ``False`` if the player does not support the
     format."""
     if isinstance(tags, ID3):
         return _id3_write_player(tags, player, rating)
@@ -397,8 +407,8 @@ def write_file(path, ratings, default_user, sync_players=(),
       ``only``); ratings of beets users not in ``ratings`` are removed,
       other players' tags are kept as-is,
     * the ``default_user`` rating is copied to the rating tags of the
-      players in ``sync_players`` (removed if the default user is not
-      rated),
+      players in ``sync_players``; if the default user is not rated, no
+      player tag is created (existing ones are removed),
     * the comments marker is added/updated if ``comments`` is ``yes`` or
       ``only``.
 

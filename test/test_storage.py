@@ -2,7 +2,7 @@ import shutil
 
 import mutagen
 import pytest
-from mutagen.id3 import POPM
+from mutagen.id3 import ID3, POPM
 from mutagen.mp4 import MP4, MP4Tags
 
 from beetsplug.userrating import storage
@@ -149,8 +149,31 @@ def test_external_zero_rating(copy_rsrc):
     flac = FLAC(path)
     flac['rating:quodlibet@lists.sacredchao.net'] = ['0.0']
     flac.save()
-    # Quod Libet: 0.0 is a 0 rating (unrated tracks have no tag)
-    assert storage.read_file(path).players == {'Quodlibet': 0}
+    # an external 0 value always means "not rated"
+    assert storage.read_file(path).players == {}
+
+
+def test_external_value_scaled_to_zero_is_unrated():
+    tags = ID3()
+    tags.add(POPM(email='rating@winamp.com', rating=1))
+    assert storage.read_tags(tags)[1] == {}
+    tags.add(POPM(email='rating@winamp.com', rating=26))
+    assert storage.read_tags(tags)[1] == {'Winamp': 1}
+
+
+def test_unrated_does_not_create_player_tags(copy_rsrc):
+    players = ['WMP', 'Banshee', 'Winamp', 'MediaMonkey', 'Quodlibet']
+    for name in ('empty.mp3', 'full.mp3', 'full.flac', 'full.ogg',
+                 'full.wma'):
+        path = copy_rsrc(name)
+        tags = mutagen.File(path).tags
+        before = set(tags.keys()) if tags is not None else set()
+        storage.write_file(path, {'toto': 3}, 'djhibee',
+                           sync_players=players)
+        after = set(mutagen.File(path).tags.keys())
+        assert not any('beets-toto' not in str(key)
+                       for key in after - before), name
+        assert storage.read_file(path).players == {}, name
 
 
 def test_update_comment():

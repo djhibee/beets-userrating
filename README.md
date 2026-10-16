@@ -182,9 +182,11 @@ the file. Tags of other players are kept as-is unless synchronized (see
 `sync_external_ratings`).
 
 Whatever the format, an unrated user has no tag at all in the file. For
-external players, their own conventions are kept: POPM `0` and WMP's
-`WM/SharedUserRating` `0` mean "unrated" for those players and are
-ignored when reading, while Quod Libet's Vorbis `0.0` is a `0` rating.
+external players, a `0` value (e.g. POPM `0`, WMP's `WM/SharedUserRating`
+`0`, Quod Libet's Vorbis `0.0`) means "not rated": it is ignored when
+reading and never imported as a `0` rating. When the default user is not
+rated, no rating tag is created for the synchronized players (an existing
+one is removed).
 
 | Format | Beets users | External players |
 | ------ | ----------- | ---------------- |
