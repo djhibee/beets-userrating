@@ -84,9 +84,10 @@ userrating:
         acoustid_fingerprint: yes   #   same AcoustID fingerprint
         bareascii: no       # same artist and title in bare ASCII (bareasc plugin)
         fuzzy: no           # fuzzily matching artist and title (fuzzy plugin)
-        # Review all the proposals at once, at the end of the import or
-        # command, instead of one track at a time.
-        global_review: no
+        # When to review the proposals: item (as soon as each track is
+        # processed), album (once each album is imported) or import (at
+        # the end of the import or command). Overridden by --review-at.
+        review_at: item
 ```
 
 ## Usage
@@ -245,7 +246,8 @@ command:
     beet autorate -p [QUERY]              # pretend: only show the proposals
     beet autorate -y [QUERY]              # apply the proposed ratings without asking
     beet autorate -u toto [QUERY]         # propose toto's ratings
-    beet autorate -g [QUERY]              # global review (all proposals at the end)
+    beet autorate --review-at album [QUERY]   # review the proposals after each album
+    beet autorate --review-at import [QUERY]  # review all the proposals at the end
     beet autorate --fuzzy --no-acoustid   # enable/disable similarity strategies
     beet autorate --no-acoustid-fingerprint --no-mb-trackid  # ... individually
     beet autorate -w / -W                 # write / don't write ratings to files
@@ -331,14 +333,22 @@ With `-p/--pretend`, proposals are only displayed. With `-y/--yes`, the
 proposed ratings are applied without asking. At import in quiet mode
 (`import -q`), proposals are skipped.
 
-With **global review** (`global_review: yes` or `-g`), all the proposals
-are first computed, then reviewed one after the other at the end of the
-command or of the import (the import is not interrupted by questions).
-Each proposal is refreshed just before being reviewed, so ratings chosen
-(or fixed) earlier in the review are taken into account. Without global
-review, each proposal is reviewed as soon as it is found. At import, global
-review is recommended, as questions would otherwise be mixed with the
-importer's ones.
+The `review_at` option (or `--review-at` for the command) chooses when
+the proposals are reviewed:
+
+| Value | At import | With `beet autorate` |
+| ----- | --------- | -------------------- |
+| `item` (default) | as soon as each imported track is processed (before the `item_imported` event, the questions are mixed with the importer's ones) | as soon as each track's proposal is found |
+| `album` | once each album is imported (`album_imported` event), or each singleton (`item_imported` event) | after the tracks of each album (consecutive tracks of the query results sharing the same album; singletons are reviewed alone) |
+| `import` | at the end of the import (`import` event): the import is not interrupted by questions | at the end of the command |
+
+With `album` and `import`, proposals are first computed, then reviewed one
+after the other. Each proposal is refreshed just before being reviewed, so
+ratings chosen (or fixed) earlier in the review are taken into account.
+
+The former `global_review: yes` option (and the `-g/--global-review`
+command flag) is replaced by `review_at: import` (`--review-at import`);
+`global_review` is still accepted, with a deprecation warning.
 
 ### 4. Rating
 

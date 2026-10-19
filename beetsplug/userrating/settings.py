@@ -19,6 +19,14 @@ from .ratings import DEFAULT_USER, RatingError, validate_user
 from .scalers import PLAYERS, find_player
 from .storage import COMMENTS_NO, COMMENTS_ONLY, COMMENTS_YES
 
+#: Values of the autorate ``review_at`` option: review the proposals as
+#: soon as each item is processed, once each album (or singleton) is
+#: imported, or at the end of the import (or of the command).
+REVIEW_AT_ITEM = 'item'
+REVIEW_AT_ALBUM = 'album'
+REVIEW_AT_IMPORT = 'import'
+REVIEW_AT_VALUES = (REVIEW_AT_ITEM, REVIEW_AT_ALBUM, REVIEW_AT_IMPORT)
+
 DEFAULT_CONFIG = {
     # Fetch ratings from files at import.
     'auto': True,
@@ -58,9 +66,10 @@ DEFAULT_CONFIG = {
         'acoustid_fingerprint': True,
         'bareascii': False,
         'fuzzy': False,
-        # Review all the proposals at once, at the end of the import or of
-        # the command, instead of one item at a time.
-        'global_review': False,
+        # When to review the proposals: `item` (as soon as each item is
+        # processed), `album` (once each album is imported) or `import` (at
+        # the end of the import or of the command).
+        'review_at': 'item',
     },
 }
 
@@ -157,6 +166,16 @@ def _optional_bool(value):
     raise ConfigError(u'invalid boolean value {0!r}'.format(value))
 
 
+def review_at(value):
+    """Validate an autorate ``review_at`` value."""
+    text = str(value).strip().lower() if value is not None else u''
+    if text not in REVIEW_AT_VALUES:
+        raise ConfigError(u'autorate.review_at must be one of {0} (got '
+                          u'{1!r})'.format(u', '.join(REVIEW_AT_VALUES),
+                                           value))
+    return text
+
+
 class Settings(object):
     """Validated plugin configuration."""
 
@@ -225,4 +244,10 @@ class Settings(object):
         self.autorate_options = dict(
             (option, bool(autorate[option].get()))
             for option in autorate_options())
-        self.autorate_global_review = bool(autorate['global_review'].get())
+        self.autorate_review_at = review_at(autorate['review_at'].get())
+        if autorate['global_review'].exists():
+            log.warning(u'autorate.global_review is deprecated, use '
+                        u'autorate.review_at instead')
+            if bool(autorate['global_review'].get()) \
+                    and self.autorate_review_at == REVIEW_AT_ITEM:
+                self.autorate_review_at = REVIEW_AT_IMPORT

@@ -246,7 +246,7 @@ def test_autorate_global_review(env, answers):
     second = _add(env, 'song')
     _add(env, 'song', rating=5)
     answers.extend(['3', ''])
-    out = env.run('autorate', '-W', '-g')
+    out = env.run('autorate', '-W', '--review-at', 'import')
     # both proposals are found before the review
     assert out.index('autorate: 2 rating proposals to review') \
         < out.index('Rating of djhibee')
@@ -267,7 +267,7 @@ def test_autorate_skips_items_rated_in_file(env):
 
 def test_autorate_import(env, answers):
     env.setup({'beets_users': ['djhibee'],
-               'autorate': {'auto': True, 'global_review': True}})
+               'autorate': {'auto': True, 'review_at': 'import'}})
     _add(env, 'song', rating=4)
     imported = _add(env, 'song')
 
@@ -283,6 +283,74 @@ def test_autorate_import(env, answers):
     answers.append('')
     env.plugin.on_import_end(env.lib, [])
     assert _rating(env, imported) == 4
+
+
+def test_autorate_review_at_album_command(env, answers):
+    album_items = [_add(env, 'song'), _add(env, 'tune')]
+    env.lib.add_album(album_items)
+    _add(env, 'song', rating=5)
+    _add(env, 'tune', rating=7)
+    answers.extend(['', ''])
+    out = env.run('autorate', '-W', '--review-at', 'album',
+                  'id:{0}'.format(album_items[0].id), ',',
+                  'id:{0}'.format(album_items[1].id))
+    assert 'autorate: 2 rating proposals to review' in out
+    assert [_rating(env, i) for i in album_items] == [5, 7]
+
+
+def test_autorate_import_review_at_album(env, answers):
+    env.setup({'beets_users': ['djhibee'],
+               'autorate': {'auto': True, 'review_at': 'album'}})
+    _add(env, 'song', rating=4)
+    imported = _add(env, 'song')
+    album = env.lib.add_album([imported])
+    other = _add(env, 'song')
+
+    class Task(object):
+        def imported_items(self):
+            return [imported, other]
+
+    class Session(object):
+        lib = env.lib
+
+    env.plugin.imported(Session(), Task())
+    assert _rating(env, imported) is None
+    answers.append('')
+    env.plugin.on_album_imported(env.lib, album)
+    assert _rating(env, imported) == 4
+    assert _rating(env, other) is None
+    answers.append('6')
+    env.plugin.on_item_imported(env.lib, other)
+    assert _rating(env, other) == 6
+    assert not answers
+
+
+def test_autorate_import_review_at_item(env, answers):
+    env.setup({'beets_users': ['djhibee'], 'autorate': {'auto': True}})
+    _add(env, 'song', rating=4)
+    imported = _add(env, 'song')
+
+    class Task(object):
+        def imported_items(self):
+            return [imported]
+
+    class Session(object):
+        lib = env.lib
+
+    answers.append('')
+    env.plugin.imported(Session(), Task())
+    assert _rating(env, imported) == 4
+
+
+def test_autorate_deprecated_global_review(env):
+    env.setup({'autorate': {'global_review': True}})
+    assert env.plugin.settings.autorate_review_at == 'import'
+
+
+def test_autorate_review_at_validation(env):
+    import beets.plugins
+    env.setup({'autorate': {'review_at': 'never'}})
+    assert beets.plugins.find_plugins() == []
 
 
 def test_autorate_import_quiet(env):

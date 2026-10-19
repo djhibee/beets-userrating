@@ -24,7 +24,8 @@ from .command import apply_ratings
 from .compat import UserError
 from .ratings import (MAX_RATING, MIN_RATING, RatingError, as_ratings,
                       validate_user)
-from .settings import autorate_options, autorate_strategies
+from .settings import (REVIEW_AT_ALBUM, REVIEW_AT_ITEM, REVIEW_AT_VALUES,
+                       autorate_options, autorate_strategies)
 from .similar import get_similar_items, get_strategy
 
 USAGE = u"""%prog [options] [QUERY...]
@@ -42,7 +43,8 @@ matching (--fuzzy, requires the fuzzy plugin), in this order.
 For each track, similar tracks are listed, grouped by rating, and the most
 frequent rating is proposed. Enter a rating (0-10, Enter for the proposed
 one), S to skip the track or X to fix: rate the track and all its similar
-tracks with the same rating."""
+tracks with the same rating. Proposals are reviewed as soon as they are
+found, after each album or at the end, according to --review-at."""
 
 
 def proposed_rating(items, user):
@@ -93,14 +95,15 @@ class AutoRater(object):
     ``write``: write ratings to the files,
     ``pretend``: only show the proposals,
     ``yes``: apply the proposed ratings without asking,
-    ``global_review``: review the proposals in :meth:`finish` instead of
-    as soon as they are found,
+    ``review_at``: ``item`` to review each proposal as soon as it is
+    found, ``album`` or ``import`` to keep the proposals pending until
+    :meth:`finish` is called (once per album, or at the end),
     ``interactive``: ask the user (otherwise proposals are skipped unless
     ``yes``).
     """
 
     def __init__(self, plugin, lib, user, strategies, write, pretend=False,
-                 yes=False, global_review=False, interactive=True):
+                 yes=False, review_at=REVIEW_AT_ITEM, interactive=True):
         self.plugin = plugin
         self.log = plugin._log
         self.lib = lib
@@ -117,7 +120,7 @@ class AutoRater(object):
         self.write = write
         self.pretend = pretend
         self.yes = yes
-        self.global_review = global_review
+        self.review_at = review_at
         self.interactive = interactive
         self.pending = []
 
@@ -158,17 +161,24 @@ class AutoRater(object):
         """
         if self.is_rated(item, check_file):
             return
-        proposal = self.find(item, None if self.global_review else write)
+        deferred = self.review_at != REVIEW_AT_ITEM
+        proposal = self.find(item, None if deferred else write)
         if proposal is None:
             return
-        if self.global_review and not self.pretend:
+        if deferred and not self.pretend:
             self.pending.append(proposal)
         else:
             self.review(proposal)
 
-    def finish(self):
-        """Review the pending proposals (global review)."""
-        pending, self.pending = self.pending, []
+    def finish(self, items=None):
+        """Review the pending proposals: all of them, or only those of
+        ``items`` when given (e.g. the items of an imported album)."""
+        if items is None:
+            pending, self.pending = self.pending, []
+        else:
+            ids = set(item.id for item in items)
+            pending = [p for p in self.pending if p.item.id in ids]
+            self.pending = [p for p in self.pending if p.item.id not in ids]
         if pending:
             ui.print_(u'autorate: {0} to review'.format(
                 _plural(len(pending), u'rating proposal')))
@@ -288,13 +298,11 @@ def build_command(plugin):
             u'--no-' + flag, dest=option, action='store_false',
             help=u'disable {0} matching'.format(option))
     parser.add_option(
-        u'-g', u'--global-review', dest='global_review',
-        action='store_true', default=None,
-        help=u'review all the proposals at the end (overrides the '
-             u'autorate "global_review" option)')
-    parser.add_option(
-        u'--no-global-review', dest='global_review', action='store_false',
-        help=u'review each proposal as soon as it is found')
+        u'--review-at', dest='review_at', metavar='WHEN',
+        choices=list(REVIEW_AT_VALUES), default=None,
+        help=u'when to review the proposals: item (as soon as found), '
+             u'album (after each album) or import (at the end) '
+             u'(overrides the autorate "review_at" option)')
     parser.add_option(
         u'-p', u'--pretend', dest='pretend', action='store_true',
         default=False, help=u'only show the proposals, change nothing')
@@ -311,7 +319,15 @@ def build_command(plugin):
 
     def func(lib, opts, args):
         rater = command_rater(plugin, lib, opts)
+        by_album = rater.review_at == REVIEW_AT_ALBUM
+        album = []
         for item in lib.items(args):
+            # Singletons are albums of their own.
+            if by_album and album and (not item.album_id or
+                                       item.album_id != album[0].album_id):
+                rater.finish(album)
+                album = []
+            album.append(item)
             rater.process(item)
         rater.finish()
 
@@ -329,12 +345,11 @@ def command_rater(plugin, lib, opts):
             raise UserError(u'autorate: {0}'.format(exc))
     overrides = dict((option, getattr(opts, option))
                      for option in autorate_options())
-    global_review = (settings.autorate_global_review
-                     if opts.global_review is None else opts.global_review)
+    review_at = opts.review_at or settings.autorate_review_at
     strategies = autorate_strategies(settings.autorate_options, overrides)
     return AutoRater(plugin, lib, user, strategies,
                      plugin.should_write(opts.write), pretend=opts.pretend,
-                     yes=opts.yes, global_review=global_review)
+                     yes=opts.yes, review_at=review_at)
 
 
 def import_rater(plugin, lib):
@@ -343,5 +358,5 @@ def import_rater(plugin, lib):
     return AutoRater(
         plugin, lib, settings.autorate_user,
         autorate_strategies(settings.autorate_options),
-        plugin.should_write(), global_review=settings.autorate_global_review,
+        plugin.should_write(), review_at=settings.autorate_review_at,
         interactive=not config['import']['quiet'].get(bool))
