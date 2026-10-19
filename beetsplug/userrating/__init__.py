@@ -55,7 +55,8 @@ from .ratings import (USER_RATINGS_TYPE, UserRatingQuery, UserRatings,
 from .scalers import (Mp3BansheeScaler, Mp3BeetsScaler,  # noqa: F401
                       Mp3MediaMonkeyScaler, Mp3QuodlibetScaler,
                       Mp3WinampScaler, Mp3WindowsMediaPlayerScaler, Scaler)
-from .settings import DEFAULT_CONFIG, ConfigError, Settings
+from .settings import (DEFAULT_CONFIG, TRIGGER_ALBUM, TRIGGER_IMPORT,
+                       ConfigError, Settings)
 
 __all__ = ['UserRatingsPlugin', 'UserRatings', 'UserRatingsType',
            'UserRatingQuery']
@@ -96,10 +97,16 @@ class UserRatingsPlugin(BeetsPlugin):
             raise UserError(u'userrating: {0}'.format(exc))
         UserRatings.default_user = self.settings.default_user
 
-        if self.settings.auto or self.settings.autorate_auto:
+        autorate_stage = (self.settings.autorate_auto
+                          and self.settings.autorate_trigger == TRIGGER_IMPORT)
+        if self.settings.auto or autorate_stage:
             self.import_stages = [self.imported]
         self._import_rater = None
         self.register_listener('import', self.on_import_end)
+        if (self.settings.autorate_auto
+                and self.settings.autorate_trigger == TRIGGER_ALBUM):
+            self.register_listener('album_imported', self.on_album_imported)
+            self.register_listener('item_imported', self.on_item_imported)
 
         self.register_listener('after_write', self.on_after_write)
         self.register_listener('library_opened', self.on_library_opened)
@@ -320,14 +327,32 @@ class UserRatingsPlugin(BeetsPlugin):
                     self._log.info(u'imported ratings {0} for {1}',
                                    format_ratings(item[FIELD]), item)
                     item.store()
-        if self.settings.autorate_auto:
-            if self._import_rater is None:
-                self._import_rater = autorate.import_rater(self, session.lib)
+        if (self.settings.autorate_auto
+                and self.settings.autorate_trigger == TRIGGER_IMPORT):
             for item in items:
                 # The files are written by beets after this stage (and
                 # ratings with them, see `on_after_write`).
-                self._import_rater.process(
-                    item, write=False, check_file=not self.settings.auto)
+                self._autorate_imported(session.lib, item, write=False)
+
+    def _autorate_imported(self, lib, item, write=None):
+        """Propose a rating for an imported item (autorate)."""
+        if self._import_rater is None:
+            self._import_rater = autorate.import_rater(self, lib)
+        # With `auto`, the file's ratings were imported by the import stage.
+        self._import_rater.process(
+            item, write=write, check_file=not self.settings.auto)
+
+    def on_album_imported(self, lib, album):
+        """Propose ratings for the items of an imported album (autorate
+        with ``trigger: album``). The files are already written: ratings
+        are written according to the ``write`` option."""
+        for item in album.items():
+            self._autorate_imported(lib, item)
+
+    def on_item_imported(self, lib, item):
+        """Propose a rating for an imported singleton (autorate with
+        ``trigger: album``)."""
+        self._autorate_imported(lib, item)
 
     def on_import_end(self, lib, paths):
         """Review the autorate proposals of the import (global review)."""

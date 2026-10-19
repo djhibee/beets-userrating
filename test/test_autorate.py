@@ -306,3 +306,71 @@ def test_autorate_config_validation(env):
     import beets.plugins
     env.setup({'autorate': {'user': 'bad user'}})
     assert beets.plugins.find_plugins() == []
+
+
+def test_autorate_trigger_validation(env):
+    import beets.plugins
+    env.setup({'autorate': {'auto': True, 'trigger': 'bad'}})
+    assert beets.plugins.find_plugins() == []
+
+
+def test_autorate_trigger_import_ignores_album_imported(env, answers):
+    import beets.plugins
+    env.setup({'beets_users': ['djhibee'], 'autorate': {'auto': True}})
+    assert env.plugin.import_stages == [env.plugin.imported]
+    _add(env, 'song', rating=4)
+    imported = _add(env, 'song')
+    album = env.lib.add_album([imported])
+    # no prompt expected (the answers fixture fails on unexpected prompts)
+    beets.plugins.send('album_imported', lib=env.lib, album=album)
+    assert env.plugin._import_rater is None
+    assert _rating(env, imported) is None
+
+
+def test_autorate_trigger_album(env, answers):
+    import beets.plugins
+    env.setup({'beets_users': ['djhibee'], 'auto': False,
+               'autorate': {'auto': True, 'trigger': 'album'}})
+    assert not getattr(env.plugin, 'import_stages', [])
+    _add(env, 'song', rating=4)
+    imported = _add(env, 'song')
+    album = env.lib.add_album([imported])
+
+    answers.append('')
+    beets.plugins.send('album_imported', lib=env.lib, album=album)
+    assert _rating(env, imported) == 4
+    assert not answers
+
+
+def test_autorate_trigger_album_stage_skips_autorate(env, answers):
+    env.setup({'beets_users': ['djhibee'],
+               'autorate': {'auto': True, 'trigger': 'album'}})
+    _add(env, 'song', rating=4)
+    imported = _add(env, 'song')
+
+    class Task(object):
+        def imported_items(self):
+            return [imported]
+
+    class Session(object):
+        lib = env.lib
+
+    # The import stage only imports the files' ratings.
+    env.plugin.imported(Session(), Task())
+    assert env.plugin._import_rater is None
+    assert _rating(env, imported) is None
+
+
+def test_autorate_trigger_album_singleton_global_review(env, answers):
+    import beets.plugins
+    env.setup({'beets_users': ['djhibee'],
+               'autorate': {'auto': True, 'trigger': 'album',
+                            'global_review': True}})
+    _add(env, 'song', rating=6)
+    imported = _add(env, 'song')
+
+    beets.plugins.send('item_imported', lib=env.lib, item=imported)
+    assert _rating(env, imported) is None
+    answers.append('')
+    env.plugin.on_import_end(env.lib, [])
+    assert _rating(env, imported) == 6

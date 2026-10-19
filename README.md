@@ -71,6 +71,10 @@ userrating:
     autorate:
         # Propose ratings at import.
         auto: no
+        # When ratings are proposed at import: import (in the import stage,
+        # before the files are written) or album (once each album, or
+        # singleton, is imported: `album_imported`/`item_imported` events).
+        trigger: import
         # User whose ratings are proposed (default: default_user).
         user: null
         # Similarity strategies (the "same artist and title" one is always
@@ -239,7 +243,19 @@ this user already rated: the same song in another format, another release
 of the same recording, a live version you probably like the same...
 
 It runs at import (`autorate: {auto: yes}`) and with the `beet autorate`
-command:
+command. At import, the `trigger` option chooses when:
+
+* `import` (default): in the plugin's import stage, for the items of each
+  import task, before beets writes the files (the chosen ratings are
+  written along with the other tags);
+* `album`: on the `album_imported` event (`item_imported` for singletons),
+  i.e. once the album is fully imported (files moved and written, album
+  stored); the chosen ratings are then written to the files according to
+  the `write` option.
+
+With both triggers, the global review happens at the end of the import.
+
+Commands:
 
     beet autorate [QUERY]                 # review proposals for unrated tracks
     beet autorate -p [QUERY]              # pretend: only show the proposals

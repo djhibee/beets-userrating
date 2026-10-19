@@ -19,6 +19,11 @@ from .ratings import DEFAULT_USER, RatingError, validate_user
 from .scalers import PLAYERS, find_player
 from .storage import COMMENTS_NO, COMMENTS_ONLY, COMMENTS_YES
 
+#: Values of the ``autorate.trigger`` option.
+TRIGGER_IMPORT = 'import'
+TRIGGER_ALBUM = 'album'
+AUTORATE_TRIGGERS = (TRIGGER_IMPORT, TRIGGER_ALBUM)
+
 DEFAULT_CONFIG = {
     # Fetch ratings from files at import.
     'auto': True,
@@ -45,6 +50,11 @@ DEFAULT_CONFIG = {
     'autorate': {
         # Propose ratings at import.
         'auto': False,
+        # When ratings are proposed at import: `import` (in the import
+        # stage, before the files are written; global review at the end of
+        # the import) or `album` (on the `album_imported` event, i.e. once
+        # an album, or a singleton with `item_imported`, is imported).
+        'trigger': 'import',
         # User whose ratings are proposed (default: the default user).
         'user': None,
         # Similarity strategies (by order of priority, see README).
@@ -214,6 +224,12 @@ class Settings(object):
 
         autorate = config['autorate']
         self.autorate_auto = bool(autorate['auto'].get())
+        trigger = str(autorate['trigger'].get() or '').strip().lower()
+        if trigger not in AUTORATE_TRIGGERS:
+            raise ConfigError(u'autorate.trigger must be one of {0} (got '
+                              u'{1!r})'.format(u', '.join(AUTORATE_TRIGGERS),
+                                               autorate['trigger'].get()))
+        self.autorate_trigger = trigger
         user = autorate['user'].get()
         if user:
             try:
