@@ -285,6 +285,38 @@ def test_autorate_import(env, answers):
     assert _rating(env, imported) == 4
 
 
+def test_autorate_import_album_imported(env, answers):
+    env.setup({'beets_users': ['djhibee'],
+               'autorate': {'auto': True, 'global_review': True}})
+    _add(env, 'song', rating=4)
+    _add(env, 'tune', rating=7)
+    in_album = _add(env, 'song')
+    other = _add(env, 'tune')
+
+    class Task(object):
+        def imported_items(self):
+            return [in_album, other]
+
+    class Session(object):
+        lib = env.lib
+
+    class Album(object):
+        def items(self):
+            return [in_album]
+
+    env.plugin.imported(Session(), Task())
+    assert _rating(env, in_album) is None
+    answers.append('')
+    env.plugin.on_album_imported(env.lib, Album())
+    # only the album's proposals are reviewed and applied
+    assert _rating(env, in_album) == 4
+    assert _rating(env, other) is None
+    assert not answers
+    answers.append('')
+    env.plugin.on_import_end(env.lib, [])
+    assert _rating(env, other) == 7
+
+
 def test_autorate_import_quiet(env):
     env.setup({'beets_users': ['djhibee'], 'autorate': {'auto': True}})
     beets.config['import']['quiet'] = True

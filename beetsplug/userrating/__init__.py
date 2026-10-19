@@ -99,6 +99,7 @@ class UserRatingsPlugin(BeetsPlugin):
         if self.settings.auto or self.settings.autorate_auto:
             self.import_stages = [self.imported]
         self._import_rater = None
+        self.register_listener('album_imported', self.on_album_imported)
         self.register_listener('import', self.on_import_end)
 
         self.register_listener('after_write', self.on_after_write)
@@ -329,8 +330,16 @@ class UserRatingsPlugin(BeetsPlugin):
                 self._import_rater.process(
                     item, write=False, check_file=not self.settings.auto)
 
+    def on_album_imported(self, lib, album):
+        """Review and apply the autorate proposals of the album's items
+        once the album is imported (global review)."""
+        rater = self._import_rater
+        if rater is not None and rater.pending:
+            rater.finish(album.items())
+
     def on_import_end(self, lib, paths):
-        """Review the autorate proposals of the import (global review)."""
+        """Review the remaining autorate proposals of the import (global
+        review), e.g. those of singletons."""
         rater, self._import_rater = self._import_rater, None
         if rater is not None:
             rater.finish()

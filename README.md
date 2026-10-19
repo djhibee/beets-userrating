@@ -333,7 +333,12 @@ proposed ratings are applied without asking. At import in quiet mode
 
 With **global review** (`global_review: yes` or `-g`), all the proposals
 are first computed, then reviewed one after the other at the end of the
-command or of the import (the import is not interrupted by questions).
+command or, at import, once each album is imported (`album_imported`
+event): the proposals of an album's tracks are reviewed and applied right
+after the album has been added to the library and its files written, so
+the chosen ratings are written to the files according to the `write`
+options. The proposals of tracks not imported as part of an album
+(singletons) are reviewed at the end of the import.
 Each proposal is refreshed just before being reviewed, so ratings chosen
 (or fixed) earlier in the review are taken into account. Without global
 review, each proposal is reviewed as soon as it is found. At import, global

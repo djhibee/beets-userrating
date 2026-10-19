@@ -166,9 +166,18 @@ class AutoRater(object):
         else:
             self.review(proposal)
 
-    def finish(self):
-        """Review the pending proposals (global review)."""
-        pending, self.pending = self.pending, []
+    def finish(self, items=None):
+        """Review the pending proposals (global review).
+
+        If ``items`` is given, only the proposals for these items are
+        reviewed, the other ones stay pending.
+        """
+        if items is None:
+            pending, self.pending = self.pending, []
+        else:
+            ids = set(item.id for item in items)
+            pending = [p for p in self.pending if p.item.id in ids]
+            self.pending = [p for p in self.pending if p.item.id not in ids]
         if pending:
             ui.print_(u'autorate: {0} to review'.format(
                 _plural(len(pending), u'rating proposal')))
