@@ -55,7 +55,7 @@ from .ratings import (USER_RATINGS_TYPE, UserRatingQuery, UserRatings,
 from .scalers import (Mp3BansheeScaler, Mp3BeetsScaler,  # noqa: F401
                       Mp3MediaMonkeyScaler, Mp3QuodlibetScaler,
                       Mp3WinampScaler, Mp3WindowsMediaPlayerScaler, Scaler)
-from .settings import DEFAULT_CONFIG, ConfigError, Settings
+from .settings import DEFAULT_CONFIG, REVIEW_AT_ALBUM, ConfigError, Settings
 
 __all__ = ['UserRatingsPlugin', 'UserRatings', 'UserRatingsType',
            'UserRatingQuery']
@@ -99,6 +99,8 @@ class UserRatingsPlugin(BeetsPlugin):
         if self.settings.auto or self.settings.autorate_auto:
             self.import_stages = [self.imported]
         self._import_rater = None
+        self.register_listener('album_imported', self.on_album_imported)
+        self.register_listener('item_imported', self.on_item_imported)
         self.register_listener('import', self.on_import_end)
 
         self.register_listener('after_write', self.on_after_write)
@@ -329,8 +331,23 @@ class UserRatingsPlugin(BeetsPlugin):
                 self._import_rater.process(
                     item, write=False, check_file=not self.settings.auto)
 
+    def on_album_imported(self, lib, album):
+        """Review the autorate proposals of an imported album
+        (``review_at: album``)."""
+        self._review_imported(list(album.items()))
+
+    def on_item_imported(self, lib, item):
+        """Review the autorate proposal of an imported singleton
+        (``review_at: album``)."""
+        self._review_imported([item])
+
+    def _review_imported(self, items):
+        rater = self._import_rater
+        if rater is not None and rater.review_at == REVIEW_AT_ALBUM:
+            rater.finish(items)
+
     def on_import_end(self, lib, paths):
-        """Review the autorate proposals of the import (global review)."""
+        """Review the remaining autorate proposals of the import."""
         rater, self._import_rater = self._import_rater, None
         if rater is not None:
             rater.finish()
