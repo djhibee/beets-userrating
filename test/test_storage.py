@@ -35,6 +35,30 @@ def test_mp3_write_keeps_other_popm_frames(copy_rsrc):
                            'beets-toto': 102}
 
 
+def test_write_file_does_not_save_unchanged_ratings(copy_rsrc, monkeypatch):
+    path = copy_rsrc('full.mp3')
+    open_file = storage._open
+    saves = []
+
+    def open_with_save_counter(*args, **kwargs):
+        mf = open_file(*args, **kwargs)
+        save = mf.mgfile.save
+
+        def save_and_count(*save_args, **save_kwargs):
+            saves.append(None)
+            return save(*save_args, **save_kwargs)
+
+        monkeypatch.setattr(mf.mgfile, 'save', save_and_count)
+        return mf
+
+    monkeypatch.setattr(storage, '_open', open_with_save_counter)
+    assert storage.write_file(path, {'toto': 5}, 'toto')
+    assert len(saves) == 1
+
+    assert not storage.write_file(path, {'toto': 5}, 'toto')
+    assert len(saves) == 1
+
+
 def test_mp3_preserves_play_count(copy_rsrc):
     path = copy_rsrc('full.mp3')
     mf = mutagen.File(path)

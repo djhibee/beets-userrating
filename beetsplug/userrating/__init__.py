@@ -235,7 +235,7 @@ class UserRatingsPlugin(BeetsPlugin):
         path = path or item.path
         ratings = as_ratings(item.get(FIELD))
         try:
-            storage.write_file(
+            changed = storage.write_file(
                 syspath(path), ratings, self.settings.default_user,
                 sync_players=self.settings.sync_players,
                 comments=self.settings.comments,
@@ -248,8 +248,12 @@ class UserRatingsPlugin(BeetsPlugin):
             self._log.error(u'could not write ratings to {0}: {1}',
                             displayable_path(item.path), exc)
             return False
-        self._log.debug(u'wrote ratings {0} to {1}', ratings,
-                        displayable_path(item.path))
+        if changed:
+            self._log.debug(u'wrote ratings {0} to {1}', ratings,
+                            displayable_path(item.path))
+        else:
+            self._log.debug(u'ratings already up to date in {0}',
+                            displayable_path(item.path))
         return True
 
     def on_after_write(self, item, path, **kwargs):

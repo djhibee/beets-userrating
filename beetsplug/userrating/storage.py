@@ -37,6 +37,7 @@ Storage formats
   ``[beets-userrating: user1=3, user2=4]``.
 """
 
+import copy
 import os
 import re
 
@@ -403,10 +404,11 @@ def write_file(path, ratings, default_user, sync_players=(),
       ``only``.
 
     May raise :class:`UnsupportedFormatError` or one of
-    :data:`FILE_ERRORS`.
+    :data:`FILE_ERRORS`. Return whether the file was changed.
     """
     mf = _open(path, id3v23=id3v23)
     mgfile = mf.mgfile
+    original_tags = copy.deepcopy(mgfile.tags)
     if mgfile.tags is None:
         mgfile.add_tags()
     tags = mgfile.tags
@@ -421,4 +423,7 @@ def write_file(path, ratings, default_user, sync_players=(),
         updated = update_comment(current, ratings)
         if updated != (current or u''):
             mf.comments = updated or None
+    if tags == original_tags:
+        return False
     mf.save()
+    return True
