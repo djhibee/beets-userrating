@@ -18,21 +18,28 @@
 
 from collections import Counter
 
-from beets import config, ui
+from beets import config, plugins, ui
+from beets.util import displayable_path
 
 from .command import apply_ratings
 from .compat import UserError
 from .ratings import (MAX_RATING, MIN_RATING, RatingError, as_ratings,
                       validate_user)
-from .settings import (REVIEW_AT_ALBUM, REVIEW_AT_ITEM, REVIEW_AT_VALUES,
-                       autorate_options, autorate_strategies)
-from .similar import get_similar_items, get_strategy
+from .settings import (ALGORITHMS, ConfigError, REVIEW_AT_ALBUM, REVIEW_AT_ITEM,
+                       REVIEW_AT_VALUES, autorate_options, autorate_strategies,
+                       similarity_threshold)
+from .similar import SimilarItems, Strategy, get_similar_items, get_strategy
 
 USAGE = u"""%prog [options] [QUERY...]
 
 Propose a rating for the tracks matching QUERY that the user did not rate
 yet (neither in beets nor in the files, including external players'
-ratings), based on the ratings of similar tracks of the library: same
+ratings), using the beets-similarity matrix by default. Candidates at or
+above --min-threshold are listed by increasing distance. Strong matches
+are accepted automatically unless --timid; --quiet skips and logs those
+requiring review. Both options honor beets' import quiet/timid settings.
+
+With --algorithm legacy, use the historical strategies: same
 MusicBrainz release track (--mb-releasetrackid) or recording (--mb-trackid),
 both enabled by --mbtrackid, same AcoustID (--acoustid-id) or AcoustID
 fingerprint (--acoustid-fingerprint), both enabled by --acoustid, same
@@ -40,8 +47,8 @@ artist and title, same artist and
 title in bare ASCII (--bareascii, requires the bareasc plugin) or fuzzily
 matching (--fuzzy, requires the fuzzy plugin), in this order.
 
-For each track, similar tracks are listed, grouped by rating, and the most
-frequent rating is proposed. Enter a rating (0-10, Enter for the proposed
+The most frequent rating is proposed (legacy results are grouped by rating).
+Enter a rating (0-10, Enter for the proposed
 one), S to skip the track or X to fix: rate the track and all its similar
 tracks with the same rating. Proposals are reviewed as soon as they are
 found, after each album or at the end, according to --review-at."""
@@ -62,13 +69,19 @@ class Proposal(object):
     """A rating proposed for ``item`` based on the ``similar`` items (a
     :class:`~beetsplug.userrating.similar.SimilarItems`)."""
 
-    def __init__(self, item, user, similar, write):
+    def __init__(self, item, user, similar, write, scores=None):
         self.item = item
         self.user = user
         self.strategy = similar.strategy if similar is not None else None
         self.similar = similar.items if similar is not None else []
         self.write = write
         self.rating = proposed_rating(self.similar, user)
+        self.scores = scores
+        # Confidence must support the proposed rating, not another candidate's.
+        self.distance = min(
+            (1 - scores[i.id] for i in self.similar
+             if as_ratings(i.get('userrating')).get(user) == self.rating),
+            default=None) if scores is not None else None
         groups = {}
         for similar_item in self.similar:
             rating = as_ratings(similar_item.get('userrating')).get(user)
@@ -98,18 +111,42 @@ class AutoRater(object):
     ``review_at``: ``item`` to review each proposal as soon as it is
     found, ``album`` or ``import`` to keep the proposals pending until
     :meth:`finish` is called (once per album, or at the end),
-    ``interactive``: ask the user (otherwise proposals are skipped unless
-    ``yes``).
+    ``algorithm``: ``similarity_score`` for the stored similarity matrix,
+    or ``legacy`` for the historical strategies,
+    ``min_threshold``: minimum matrix similarity score,
+    ``strong_rec_thresh``: maximum distance for automatic acceptance
+    (``None`` inherits beets' match setting),
+    ``quiet``: skip and log proposals requiring interaction,
+    ``timid``: disable automatic acceptance of strong proposals,
+    ``interactive``: allow prompts (``yes`` and strong matches can still
+    apply ratings without prompting).
     """
 
     def __init__(self, plugin, lib, user, strategies, write, pretend=False,
-                 yes=False, review_at=REVIEW_AT_ITEM, interactive=True):
+                 yes=False, review_at=REVIEW_AT_ITEM, interactive=True,
+                 algorithm='similarity_score', min_threshold=0.8,
+                 strong_rec_thresh=None, quiet=False, timid=False):
         self.plugin = plugin
         self.log = plugin._log
         self.lib = lib
         self.user = user
+        self.min_threshold = min_threshold
+        self.strong_rec_thresh = (
+            config['match']['strong_rec_thresh'].as_number()
+            if strong_rec_thresh is None else strong_rec_thresh)
+        self.timid = timid
+        self.similarity = None
+        if algorithm == 'similarity_score':
+            self.similarity = next(
+                (p for p in plugins.find_plugins()
+                 if p.name == 'similarity'), None)
+            if self.similarity is None:
+                raise UserError(
+                    u'autorate: similarity_score requires the similarity '
+                    u'plugin; add similarity to plugins or use '
+                    u'--algorithm legacy')
         self.strategies = []
-        for name in strategies:
+        for name in strategies if algorithm == 'legacy' else ():
             strategy = get_strategy(name)
             if strategy.available():
                 self.strategies.append(strategy)
@@ -121,7 +158,7 @@ class AutoRater(object):
         self.pretend = pretend
         self.yes = yes
         self.review_at = review_at
-        self.interactive = interactive
+        self.interactive = interactive and not quiet
         self.pending = []
 
     # Finding ---------------------------------------------------------
@@ -144,14 +181,27 @@ class AutoRater(object):
     def find(self, item, write=None):
         """Return a :class:`Proposal` for ``item`` or ``None``."""
         user = self.user
-        similar = get_similar_items(
-            self.lib, item, strategies=self.strategies, log=self.log,
-            predicate=lambda i: as_ratings(i.get('userrating')).get(user)
-            is not None)
+        scores = None
+        if self.similarity is not None:
+            matches = [
+                (other, score) for other, score in self.similarity.similar_items(
+                    self.lib, item, threshold=self.min_threshold)
+                if other.id != item.id
+                and as_ratings(other.get('userrating')).get(user) is not None]
+            matches.sort(key=lambda pair: (-pair[1], pair[0].id))
+            scores = {other.id: score for other, score in matches}
+            similar = SimilarItems(
+                Strategy('similarity_score', 'similarity score', ()),
+                [other for other, _ in matches]) if matches else None
+        else:
+            similar = get_similar_items(
+                self.lib, item, strategies=self.strategies, log=self.log,
+                predicate=lambda i: as_ratings(i.get('userrating')).get(user)
+                is not None)
         if similar is None:
             self.log.debug(u'autorate: no rated similar item for {0}', item)
         return Proposal(item, user, similar,
-                        self.write if write is None else write)
+                        self.write if write is None else write, scores=scores)
 
     def process(self, item, write=None, check_file=True):
         """Propose a rating for ``item`` if the user did not rate it.
@@ -206,11 +256,20 @@ class AutoRater(object):
         else:
             ui.print_(u'  not rated by {0}; no similar items rated by {0}'
                       .format(proposal.user))
-        for rating, items in proposal.groups:
-            ui.print_(u'    {0} ({1}):'.format(
-                rating, _plural(len(items), u'item')))
-            for item in items:
-                ui.print_(u'      - {0}'.format(_describe(item)))
+        if proposal.scores is not None:
+            for item in proposal.similar:
+                score = proposal.scores[item.id]
+                ui.print_(u'    - {0}: rating {1}, distance {2:.6f} '
+                          u'(similarity {3:.6f})'.format(
+                              _describe(item),
+                              as_ratings(item.get('userrating'))[proposal.user],
+                              1 - score, score))
+        else:
+            for rating, items in proposal.groups:
+                ui.print_(u'    {0} ({1}):'.format(
+                    rating, _plural(len(items), u'item')))
+                for item in items:
+                    ui.print_(u'      - {0}'.format(_describe(item)))
         if proposal.rating is None:
             ui.print_(u'  no rating proposed')
         else:
@@ -225,9 +284,15 @@ class AutoRater(object):
             if proposal.rating is not None:
                 return self.rate(proposal, proposal.rating)
             return
+        if (not self.timid and proposal.distance is not None
+                and proposal.distance < self.strong_rec_thresh):
+            return self.rate(proposal, proposal.rating)
         if not self.interactive:
-            self.log.info(u'autorate: {0} not rated (non-interactive '
-                          u'mode)', proposal.item)
+            self.log.info(
+                u'autorate: deferred for offline review: id:{0}, user={1}, '
+                u'proposed={2}, distance={3}, path={4} (non-interactive mode)',
+                proposal.item.id, proposal.user, proposal.rating,
+                proposal.distance, displayable_path(proposal.item.path))
             return
         if proposal.rating is None:
             choice = ui.input_options(
@@ -284,6 +349,18 @@ def build_command(plugin):
              u'tracks')
     cmd.parser.usage = USAGE
     parser = cmd.parser
+    parser.add_option(
+        u'--algorithm', choices=list(ALGORITHMS), default=None,
+        help=u'similarity algorithm: similarity_score (default) or legacy')
+    parser.add_option(
+        u'--min-threshold', type='float', default=None,
+        help=u'minimum similarity score in (0, 1]')
+    parser.add_option(
+        u'-q', u'--quiet', action='store_true', default=False,
+        help=u'skip and log proposals requiring a prompt')
+    parser.add_option(
+        u'-t', u'--timid', action='store_true', default=False,
+        help=u'ask even for strong matches (unless --yes)')
     parser.add_option(
         u'-u', u'--user', dest='user', metavar='USER',
         help=u'user to rate for (default: autorate "user" option, or the '
@@ -347,9 +424,22 @@ def command_rater(plugin, lib, opts):
                      for option in autorate_options())
     review_at = opts.review_at or settings.autorate_review_at
     strategies = autorate_strategies(settings.autorate_options, overrides)
+    try:
+        threshold = (settings.autorate_min_threshold
+                     if opts.min_threshold is None else similarity_threshold(
+                         opts.min_threshold, 'min_threshold'))
+    except ConfigError as exc:
+        raise UserError(u'autorate: {0}'.format(exc))
     return AutoRater(plugin, lib, user, strategies,
                      plugin.should_write(opts.write), pretend=opts.pretend,
-                     yes=opts.yes, review_at=review_at)
+                     yes=opts.yes, review_at=review_at,
+                     algorithm=opts.algorithm or settings.autorate_algorithm,
+                     min_threshold=threshold,
+                     strong_rec_thresh=settings.autorate_strong_rec_thresh,
+                     quiet=(opts.quiet or settings.autorate_quiet
+                            or config['import']['quiet'].get(bool)),
+                     timid=(opts.timid or settings.autorate_timid
+                            or config['import']['timid'].get(bool)))
 
 
 def import_rater(plugin, lib):
@@ -359,4 +449,8 @@ def import_rater(plugin, lib):
         plugin, lib, settings.autorate_user,
         autorate_strategies(settings.autorate_options),
         plugin.should_write(), review_at=settings.autorate_review_at,
-        interactive=not config['import']['quiet'].get(bool))
+        algorithm=settings.autorate_algorithm,
+        min_threshold=settings.autorate_min_threshold,
+        strong_rec_thresh=settings.autorate_strong_rec_thresh,
+        quiet=settings.autorate_quiet or config['import']['quiet'].get(bool),
+        timid=settings.autorate_timid or config['import']['timid'].get(bool))

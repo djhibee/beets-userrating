@@ -10,6 +10,13 @@ IDS = ('mb_releasetrackid', 'mb_trackid', 'acoustid_id',
        'acoustid_fingerprint')
 
 
+@pytest.fixture(autouse=True)
+def legacy_autorating(monkeypatch):
+    """Keep the historical workflow's regression tests in legacy mode."""
+    from beetsplug.userrating.settings import DEFAULT_CONFIG
+    monkeypatch.setitem(DEFAULT_CONFIG['autorate'], 'algorithm', 'legacy')
+
+
 def _add(env, title, artist='artist', rating=None, fixture='full', ext='mp3',
          **values):
     values.update({'title': title, 'artist': artist})
