@@ -27,14 +27,16 @@ itself based on the work of Michael Dorman. It is released under the
 
 ## Installation
 
-Requires beets 2.0 or later (Python 3.9+).
+Requires beets 2.14.1 or later (Python 3.12+). Installation also installs
+the [djhibee/beets-similarity](https://github.com/djhibee/beets-similarity)
+plugin, required by the default autorating algorithm.
 
     $ pip install https://github.com/djhibee/beets-userrating/archive/master.zip
 
 Add the plugin to the beets configuration file:
 
 ```yaml
-plugins: (...) userrating
+plugins: (...) similarity userrating
 ```
 
 ## Configuration
@@ -73,7 +75,20 @@ userrating:
         auto: no
         # User whose ratings are proposed (default: default_user).
         user: null
-        # Similarity strategies (the "same artist and title" one is always
+        # similarity_score (default) or legacy (historical matching).
+        algorithm: similarity_score
+        # Minimum similarity score, inclusive, in (0, 1].
+        min_threshold: 0.8
+        # Accept a proposal when its supporting distance is strictly below
+        # this value. null inherits match.strong_rec_thresh (beets default:
+        # 0.04). Distance = 1 - similarity; valid range: [0, 1].
+        strong_rec_thresh: null
+        # Never prompt: accept strong proposals, log the rest for review.
+        quiet: no
+        # Disable automatic acceptance of strong proposals.
+        timid: no
+        # Legacy similarity strategies (ignored with similarity_score).
+        # The "same artist and title" one is always
         # enabled). A strategy of a group is used only when both the group
         # option and its own option are enabled.
         mbtrackid: yes              # group: both MusicBrainz strategies
@@ -248,8 +263,11 @@ command:
     beet autorate -u toto [QUERY]         # propose toto's ratings
     beet autorate --review-at album [QUERY]   # review the proposals after each album
     beet autorate --review-at import [QUERY]  # review all the proposals at the end
-    beet autorate --fuzzy --no-acoustid   # enable/disable similarity strategies
-    beet autorate --no-acoustid-fingerprint --no-mb-trackid  # ... individually
+    beet autorate --min-threshold 0.9 [QUERY]  # require similarity >= 0.9
+    beet autorate -t [QUERY]              # timid: review even strong proposals
+    beet autorate -q [QUERY]              # quiet: accept strong proposals, log others
+    beet autorate --algorithm legacy --fuzzy --no-acoustid
+    beet autorate --algorithm legacy --no-acoustid-fingerprint --no-mb-trackid
     beet autorate -w / -W                 # write / don't write ratings to files
 
 ### 1. Unrated tracks
@@ -266,7 +284,29 @@ has no rating for it:
 
 ### 2. Finding similar rated tracks
 
-Similar tracks are looked for in the library with the following
+With `algorithm: similarity_score` (the default), autorate reads the
+**stored similarity matrix** through beets-similarity's `similar_items`
+API. It honors manual associations/dissociations, excludes the track itself
+and tracks not rated by the chosen user, and retains scores **at or above**
+`autorate.min_threshold` (overridden by `--min-threshold`). Results are shown
+by increasing distance (`1 - similarity`), with item ID breaking ties,
+including each candidate's rating, distance and similarity.
+
+For existing tracks, compute the matrix first, using a scoped query:
+
+    beet similar --add artist:"Daft Punk"
+    beet autorate artist:"Daft Punk"
+
+The command only reads stored scores; missing pairs are not treated as zero
+and no legacy fallback is used. At import, autorate refreshes the imported
+tracks' artist-scoped pairs before searching, regardless of plugin order or
+`similarity.auto`. The similarity plugin must be enabled; otherwise autorate
+reports an error suggesting `--algorithm legacy`. To compare saved
+fingerprints, install beets-similarity's acoustic dependencies as described
+in its documentation, or set `similarity.acoustic: no`.
+
+With `algorithm: legacy` (or `--algorithm legacy`), similar tracks are
+looked for in the library with the following
 strategies, by order of priority. Only the tracks rated by the chosen user
 are considered (and never the track itself). The first strategy finding
 at least one similar track wins; the next ones are not tried.
@@ -301,9 +341,9 @@ warning and skips the strategy.
 
 ### 3. Proposal and review
 
-The similar tracks are displayed grouped by rating, the most frequent
-rating first, and the **most frequent rating** is proposed (ties are
-broken by the highest rating):
+For both algorithms, the **most frequent rating** is proposed (ties are
+broken by the highest rating). Legacy results are displayed grouped by
+rating, the most frequent rating first:
 
     the artist - the album - song [FLAC]
       not rated by djhibee; 3 similar items rated by djhibee (same MusicBrainz recording):
@@ -329,9 +369,28 @@ Choices:
   frequent one by default), then the track **and all its similar tracks**
   are rated with it.
 
-With `-p/--pretend`, proposals are only displayed. With `-y/--yes`, the
-proposed ratings are applied without asking. At import in quiet mode
-(`import -q`), proposals are skipped.
+With `similarity_score`, a proposal is automatically accepted if the best
+distance **supporting the proposed rating** is strictly below
+`autorate.strong_rec_thresh`; `null` inherits beets'
+`match.strong_rec_thresh`. A close candidate with a different rating cannot
+make a weaker majority proposal a strong match. Otherwise, the same
+interactive rating/skip/fix prompt is used.
+
+`-t/--timid` (or `autorate.timid`) disables this automatic acceptance.
+`-q/--quiet` (or `autorate.quiet`) never prompts: strong proposals are still
+accepted unless timid, and all others are skipped and logged with item ID,
+path, user, proposed rating and distance for offline review. Capture beets'
+logging output (for example `beet autorate -q QUERY 2>autorate-review.log`)
+and rerun those IDs without quiet mode to review them later. No-match items
+are also logged in quiet mode. The local quiet/timid settings are combined
+with beets' `import.quiet` / `import.timid` settings, including flags passed
+to `beet import`; neither local option can disable a global setting.
+Quiet and timid together skip all proposals requiring review.
+
+With `-p/--pretend`, proposals are only displayed, never applied. With
+`-y/--yes`, proposed ratings are applied without asking, explicitly
+overriding timid mode. In `legacy` mode, no proposals are automatically
+accepted without `--yes`; quiet mode skips and logs them.
 
 The `review_at` option (or `--review-at` for the command) chooses when
 the proposals are reviewed:

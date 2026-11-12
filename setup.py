@@ -10,9 +10,13 @@ setup(
                 "geek's media organizer",
     long_description=README,
     long_description_content_type='text/markdown',
-    install_requires=['beets >= 2.0', 'mutagen', 'mediafile'],
+    install_requires=[
+        'beets >= 2.14.1', 'mutagen', 'mediafile',
+        'beets-similarity @ https://github.com/djhibee/beets-similarity/'
+        'archive/8dccafa8b7f8106d1be78276194bd0fda45d1412.zip',
+    ],
     extras_require={'test': ['pytest']},
-    python_requires='>=3.9',
+    python_requires='>=3.12',
     license='GPLv3',
     classifiers=[
         'License :: OSI Approved :: GNU General Public License v3 (GPLv3)',

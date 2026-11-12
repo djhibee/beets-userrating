@@ -325,6 +325,10 @@ class UserRatingsPlugin(BeetsPlugin):
         if self.settings.autorate_auto:
             if self._import_rater is None:
                 self._import_rater = autorate.import_rater(self, session.lib)
+            if self._import_rater.similarity is not None:
+                # Import stages follow plugin order: populate the matrix
+                # before autorating even if similarity's stage runs later.
+                self._import_rater.similarity.refresh_items(session.lib, items)
             for item in items:
                 # The files are written by beets after this stage (and
                 # ratings with them, see `on_after_write`).

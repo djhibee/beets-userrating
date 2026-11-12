@@ -15,6 +15,8 @@
 
 """Plugin configuration."""
 
+import math
+
 from .ratings import DEFAULT_USER, RatingError, validate_user
 from .scalers import PLAYERS, find_player
 from .storage import COMMENTS_NO, COMMENTS_ONLY, COMMENTS_YES
@@ -26,6 +28,7 @@ REVIEW_AT_ITEM = 'item'
 REVIEW_AT_ALBUM = 'album'
 REVIEW_AT_IMPORT = 'import'
 REVIEW_AT_VALUES = (REVIEW_AT_ITEM, REVIEW_AT_ALBUM, REVIEW_AT_IMPORT)
+ALGORITHMS = ('legacy', 'similarity_score')
 
 DEFAULT_CONFIG = {
     # Fetch ratings from files at import.
@@ -55,6 +58,12 @@ DEFAULT_CONFIG = {
         'auto': False,
         # User whose ratings are proposed (default: the default user).
         'user': None,
+        'algorithm': 'similarity_score',
+        'min_threshold': 0.8,
+        # null follows beets' match.strong_rec_thresh (a distance).
+        'strong_rec_thresh': None,
+        'quiet': False,
+        'timid': False,
         # Similarity strategies (by order of priority, see README).
         # `mbtrackid` and `acoustid` enable/disable groups of strategies
         # that can also be enabled/disabled independently.
@@ -176,6 +185,20 @@ def review_at(value):
     return text
 
 
+def similarity_threshold(value, name, inclusive=False):
+    """Validate a finite similarity score or distance threshold."""
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ConfigError(u'autorate.{0} must be a number'.format(name))
+    if (isinstance(value, bool) or not math.isfinite(number)
+            or number > 1 or number < 0
+            or (not inclusive and number == 0)):
+        raise ConfigError(u'autorate.{0} must be in {1}0, 1]'.format(
+            name, '[' if inclusive else '('))
+    return number
+
+
 class Settings(object):
     """Validated plugin configuration."""
 
@@ -233,6 +256,18 @@ class Settings(object):
 
         autorate = config['autorate']
         self.autorate_auto = bool(autorate['auto'].get())
+        self.autorate_algorithm = autorate['algorithm'].get()
+        if self.autorate_algorithm not in ALGORITHMS:
+            raise ConfigError(u'autorate.algorithm must be one of {0}'.format(
+                u', '.join(ALGORITHMS)))
+        self.autorate_min_threshold = similarity_threshold(
+            autorate['min_threshold'].get(), 'min_threshold')
+        strong = autorate['strong_rec_thresh'].get()
+        self.autorate_strong_rec_thresh = (
+            None if strong is None else similarity_threshold(
+                strong, 'strong_rec_thresh', inclusive=True))
+        self.autorate_quiet = bool(autorate['quiet'].get())
+        self.autorate_timid = bool(autorate['timid'].get())
         user = autorate['user'].get()
         if user:
             try:
