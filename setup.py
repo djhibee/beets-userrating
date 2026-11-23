@@ -13,7 +13,7 @@ setup(
     install_requires=[
         'beets >= 2.14.1', 'mutagen', 'mediafile',
         'beets-similarity @ https://github.com/djhibee/beets-similarity/'
-        'archive/8dccafa8b7f8106d1be78276194bd0fda45d1412.zip',
+        'archive/refs/tags/v1.0.0.zip',
     ],
     extras_require={'test': ['pytest'], 'fuzzy': ['rapidfuzz>=3.0']},
     python_requires='>=3.12',
