@@ -26,5 +26,5 @@ setup(
     packages=['beetsplug', 'beetsplug.userrating'],
     platforms='ALL',
     url='https://github.com/djhibee/beets-userrating',
-    version='1.0.0',
+    version='1.0.1',
 )
