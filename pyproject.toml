@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "beets-userrating"
+version = "1.0.0"
+description = "A plugin for managing per-user track ratings in the music geek's media organizer"
+readme = { file = "README.md", content-type = "text/markdown" }
+authors = [{ name = "djhibee (based on the work of Jean-Philippe Hautin)" }]
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = [
+    "beets>=2.14.1",
+    "mutagen",
+    "mediafile",
+    "beets-similarity @ https://github.com/djhibee/beets-similarity/archive/8dccafa8b7f8106d1be78276194bd0fda45d1412.zip",
+]
+
+[project.optional-dependencies]
+test = ["pytest"]
+fuzzy = ["rapidfuzz>=3.0"]
+
+[project.urls]
+Homepage = "https://github.com/djhibee/beets-userrating"
+
+[tool.setuptools]
+packages = ["beetsplug", "beetsplug.userrating"]
