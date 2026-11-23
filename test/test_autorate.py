@@ -173,6 +173,27 @@ def test_bareascii_and_fuzzy_require_plugins(env):
     assert {s.name for s in STRATEGIES} >= {'bareascii', 'fuzzy'}
 
 
+def test_fuzzy_index_matches_without_rapidfuzz_and_tracks_changes(env):
+    from beetsplug.userrating import similar
+    target = _add(env, 'Tele', artist='Andre')
+    typo = _add(env, 'Telle', artist='Andre')
+    _add(env, 'Other song', artist='Someone')
+    env.setup({'beets_users': ['djhibee']}, plugins=['fuzzy'])
+
+    def ids():
+        found = get_similar_items(env.lib, target, strategies=['fuzzy'])
+        return [i.id for i in found.items] if found else []
+
+    with_rapidfuzz = ids()
+    assert with_rapidfuzz == [typo.id]
+    env.monkeypatch.setattr(similar, 'rf_process', None)
+    assert ids() == with_rapidfuzz
+
+    # The in-memory index follows library changes.
+    later = _add(env, 'Tel', artist='Andre')
+    assert ids() == [typo.id, later.id]
+
+
 def test_proposed_rating():
     class FakeItem(dict):
         pass

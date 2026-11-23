@@ -15,7 +15,7 @@ setup(
         'beets-similarity @ https://github.com/djhibee/beets-similarity/'
         'archive/8dccafa8b7f8106d1be78276194bd0fda45d1412.zip',
     ],
-    extras_require={'test': ['pytest']},
+    extras_require={'test': ['pytest'], 'fuzzy': ['rapidfuzz>=3.0']},
     python_requires='>=3.12',
     license='GPLv3',
     classifiers=[
