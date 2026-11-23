@@ -13,7 +13,7 @@ setup(
     install_requires=[
         'beets >= 2.14.1', 'mutagen', 'mediafile',
         'beets-similarity @ https://github.com/djhibee/beets-similarity/'
-        'archive/refs/tags/v1.0.0.zip',
+        'archive/refs/tags/v1.1.0.zip',
     ],
     extras_require={'test': ['pytest'], 'fuzzy': ['rapidfuzz>=3.0']},
     python_requires='>=3.12',
@@ -26,5 +26,5 @@ setup(
     packages=['beetsplug', 'beetsplug.userrating'],
     platforms='ALL',
     url='https://github.com/djhibee/beets-userrating',
-    version='1.0.0',
+    version='1.1.0',
 )
