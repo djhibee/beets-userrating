@@ -39,6 +39,11 @@ from beets import config, plugins
 from beets.dbcore.query import AndQuery, MatchQuery, StringQuery
 
 try:
+    from rapidfuzz import fuzz, process as rf_process
+except ImportError:  # optional: difflib alone gives the same results
+    fuzz = rf_process = None
+
+try:
     from unidecode import unidecode
 except ImportError:  # pragma: no cover - unidecode is a beets dependency
     def unidecode(text):
@@ -92,6 +97,10 @@ class Strategy(object):
         return all(item.get(field) == candidate.get(field)
                    for field in self.fields)
 
+    def find(self, lib, item):
+        """Return the candidate items to check with :meth:`match`."""
+        return lib.items(self.query(item))
+
     def __repr__(self):
         return 'Strategy({0!r})'.format(self.name)
 
@@ -138,7 +147,14 @@ class BareAsciiStrategy(ArtistTitleStrategy):
 class FuzzyStrategy(ArtistTitleStrategy):
     """Similar artist and title (``difflib`` ratio of the lower-cased
     values above the ``fuzzy.threshold`` option). Requires the ``fuzzy``
-    plugin. All the items are scanned: this is the slowest strategy."""
+    plugin.
+
+    The library is not queried for each item: a light index of
+    ``(id, artist, title)`` is built once per library revision and kept in
+    memory (never saved). With ``rapidfuzz`` installed, it only rejects
+    candidates early: ``fuzz.ratio`` is never lower than the ``difflib``
+    ratio, and ``difflib`` still takes the final decision, so the results
+    are the same with or without it."""
 
     def __init__(self):
         super(FuzzyStrategy, self).__init__(
@@ -161,6 +177,46 @@ class FuzzyStrategy(ArtistTitleStrategy):
                     < threshold:
                 return False
         return True
+
+    def _index(self, lib):
+        revision = lib.revision if hasattr(lib, 'revision') else None
+        cached = getattr(lib, '_userrating_fuzzy_index', None)
+        if cached is not None and revision is not None \
+                and cached[0] == revision:
+            return cached[1]
+        with lib.transaction() as tx:
+            rows = tx.query('SELECT id, artist, title FROM items '
+                            'ORDER BY id')
+        index = [(row[0], self.normalize(row[1]), self.normalize(row[2]))
+                 for row in rows]
+        index = [entry for entry in index if entry[1] and entry[2]]
+        lib._userrating_fuzzy_index = (revision, index)
+        return index
+
+    @staticmethod
+    def _prefilter(value, entries, position, threshold):
+        """Entries whose ``position`` field may reach ``threshold``."""
+        if rf_process is not None:
+            # A margin absorbs float rounding; difflib decides afterwards.
+            cutoff = max(0.0, threshold * 100 - 1e-6)
+            kept = rf_process.extract(
+                value, [entry[position] for entry in entries],
+                scorer=fuzz.ratio, score_cutoff=cutoff, limit=None)
+            return [entries[i] for i in sorted(match[2] for match in kept)]
+        return [entry for entry in entries
+                if difflib.SequenceMatcher(
+                    None, value, entry[position]).ratio() >= threshold]
+
+    def find(self, lib, item):
+        threshold = config['fuzzy']['threshold'].as_number()
+        self._threshold = threshold
+        entries = self._index(lib)
+        for position, field in ((1, 'artist'), (2, 'title')):
+            entries = self._prefilter(
+                self.normalize(item.get(field)), entries, position,
+                threshold)
+        found = (lib.get_item(entry[0]) for entry in entries)
+        return [candidate for candidate in found if candidate is not None]
 
 
 #: Built-in strategies, by order of priority.
@@ -243,7 +299,7 @@ def get_similar_items(lib, item, strategies=None, query=None,
         if not strategy.applies_to(item):
             continue
         found = []
-        for candidate in lib.items(strategy.query(item)):
+        for candidate in strategy.find(lib, item):
             if (candidate.id == item.id or candidate.id in seen
                     or (allowed is not None and candidate.id not in allowed)
                     or not strategy.match(item, candidate)

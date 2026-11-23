@@ -319,7 +319,7 @@ at least one similar track wins; the next ones are not tried.
 | 4 | same AcoustID fingerprint (`acoustid_fingerprint`, set by the `chroma` plugin) | the same audio, when the AcoustID lookup gave no id (fingerprints of different encodings rarely match exactly) | `acoustid` and `acoustid_fingerprint` |
 | 5 | same artist and title (case-insensitive) | albums imported as-is (no MusicBrainz ids), other albums, other versions of the song you potentially like the same | always |
 | 6 | same artist and title in bare ASCII (accents removed, case-insensitive) | accents wrong in the library or in the CD information | `bareascii` (requires the `bareasc` plugin) |
-| 7 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; scans the whole library, slower) |
+| 7 | fuzzily matching artist and title: both `difflib` similarity ratios (lower-cased) must reach the `fuzzy` plugin's `threshold` (default 0.7) | typos | `fuzzy` (requires the `fuzzy` plugin; compares against an in-memory index of the library, slower than the others) |
 
 Each option has a `--<option>` / `--no-<option>` command flag (underscores
 written as dashes, e.g. `--no-acoustid-fingerprint`) overriding the
@@ -332,8 +332,11 @@ track, or dropping `acoustid_fingerprint` if exact fingerprint matches are
 useless for you. The performance gain is small for the MusicBrainz and
 AcoustID strategies: they are simple equality queries on library fields,
 and are skipped anyway when the track has no value for the field or when a
-previous strategy found similar tracks. The `fuzzy` strategy, which scans
-the whole library, is the one worth disabling for speed.
+previous strategy found similar tracks. The `fuzzy` strategy, which compares
+against the whole library, is the one worth disabling for speed. It reads
+`(id, artist, title)` once per run into memory (nothing is saved) and loads
+full items only for matches; install `beets-userrating[fuzzy]` to speed it
+up with `rapidfuzz`, with identical results.
 
 Strategies whose fields are empty on the track are skipped. Enabling
 `bareascii` or `fuzzy` without loading the corresponding plugin logs a
