@@ -1,4 +1,4 @@
 beets>=2.14.1
-beets-similarity @ https://github.com/djhibee/beets-similarity/archive/refs/tags/v1.1.0.zip
+beets-similarity @ https://github.com/djhibee/beets-similarity/archive/refs/tags/v1.2.0.zip
 mutagen
 mediafile
