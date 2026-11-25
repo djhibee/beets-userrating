@@ -71,6 +71,7 @@ def test_scores_sorted_filtered_and_inclusive(scored_env):
     out = run(env, target, '-p')
     assert out.index('close') < out.index('tied') < out.index('far')
     assert 'distance 0.050000 (similarity 0.950000)' in out
+    assert 'proposed rating: 4' in out
     assert 'distance 0.200000 (similarity 0.800000)' in out
     assert 'excluded' not in out
     assert 'unrated' not in out
@@ -228,14 +229,27 @@ def test_manual_association_and_dissociation(scored_env, no_prompt):
     assert rating(env, target) == 4
 
 
-def test_confidence_supports_modal_rating(scored_env, no_prompt):
+def test_closest_rating_beats_distant_majority_and_is_autoaccepted(scored_env, no_prompt):
     env = scored_env
     target = add(env, 'target')
     store = SimilarityStore(env.lib)
-    for score, value in [(1, 10), (.9, 3), (.85, 3)]:
+    for score, value in [(1, 4), (.7, 6), (.65, 6)]:
         source = add(env, 'source', rating=value)
         store.put(target.id, source.id, score)
-    run(env, target, '-q')
+    out = run(env, target, '-q', '--min-threshold', '.6')
+    assert 'proposed rating: 4' in out
+    assert rating(env, target) == 4
+
+
+def test_weak_closest_rating_does_not_autoaccept(scored_env, no_prompt):
+    env = scored_env
+    target = add(env, 'target')
+    store = SimilarityStore(env.lib)
+    for score, value in [(.9, 4), (.85, 6), (.8, 6)]:
+        source = add(env, 'source', rating=value)
+        store.put(target.id, source.id, score)
+    out = run(env, target, '-q')
+    assert 'proposed rating: 4' in out
     assert rating(env, target) is None
 
 
