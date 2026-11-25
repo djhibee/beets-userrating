@@ -47,7 +47,8 @@ artist and title, same artist and
 title in bare ASCII (--bareascii, requires the bareasc plugin) or fuzzily
 matching (--fuzzy, requires the fuzzy plugin), in this order.
 
-The most frequent rating is proposed (legacy results are grouped by rating).
+The closest rated item's rating is proposed with similarity_score; legacy
+proposes the most frequent rating and groups results by rating.
 Enter a rating (0-10, Enter for the proposed
 one), S to skip the track or X to fix: rate the track and all its similar
 tracks with the same rating. Proposals are reviewed as soon as they are
@@ -75,13 +76,18 @@ class Proposal(object):
         self.strategy = similar.strategy if similar is not None else None
         self.similar = similar.items if similar is not None else []
         self.write = write
-        self.rating = proposed_rating(self.similar, user)
         self.scores = scores
-        # Confidence must support the proposed rating, not another candidate's.
-        self.distance = min(
-            (1 - scores[i.id] for i in self.similar
-             if as_ratings(i.get('userrating')).get(user) == self.rating),
-            default=None) if scores is not None else None
+        if scores is not None:
+            rated = [i for i in self.similar
+                     if as_ratings(i.get('userrating')).get(user) is not None]
+            closest = min(rated, key=lambda i: (-scores[i.id], i.id),
+                          default=None)
+            self.rating = (as_ratings(closest.get('userrating')).get(user)
+                           if closest is not None else None)
+            self.distance = 1 - scores[closest.id] if closest is not None else None
+        else:
+            self.rating = proposed_rating(self.similar, user)
+            self.distance = None
         groups = {}
         for similar_item in self.similar:
             rating = as_ratings(similar_item.get('userrating')).get(user)

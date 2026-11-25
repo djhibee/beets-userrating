@@ -344,9 +344,11 @@ warning and skips the strategy.
 
 ### 3. Proposal and review
 
-For both algorithms, the **most frequent rating** is proposed (ties are
-broken by the highest rating). Legacy results are displayed grouped by
-rating, the most frequent rating first:
+With `similarity_score`, the rating of the **closest rated item** is
+proposed. If several items have the same score, the one with the lowest
+beets item ID wins. With `legacy`, the most frequent rating is proposed
+(ties are broken by the highest rating); results are displayed grouped
+by rating, the most frequent rating first:
 
     the artist - the album - song [FLAC]
       not rated by djhibee; 3 similar items rated by djhibee (same MusicBrainz recording):
@@ -372,11 +374,9 @@ Choices:
   frequent one by default), then the track **and all its similar tracks**
   are rated with it.
 
-With `similarity_score`, a proposal is automatically accepted if the best
-distance **supporting the proposed rating** is strictly below
-`autorate.strong_rec_thresh`; `null` inherits beets'
-`match.strong_rec_thresh`. A close candidate with a different rating cannot
-make a weaker majority proposal a strong match. Otherwise, the same
+With `similarity_score`, a proposal is automatically accepted if the closest
+item's distance is strictly below `autorate.strong_rec_thresh`; `null`
+inherits beets' `match.strong_rec_thresh`. Otherwise, the same
 interactive rating/skip/fix prompt is used.
 
 `-t/--timid` (or `autorate.timid`) disables this automatic acceptance.
